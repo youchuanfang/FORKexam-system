@@ -15,11 +15,12 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final BCryptPasswordEncoder passwordEncoder;
 
-    public UserServiceImpl(UserRepository userRepository, JwtUtil jwtUtil) {
+    public UserServiceImpl(UserRepository userRepository, JwtUtil jwtUtil, BCryptPasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -40,6 +41,9 @@ public class UserServiceImpl implements UserService {
     public void register(String username, String password, String role) {
         if (userRepository.existsByUsername(username)) {
             throw new RuntimeException("用户名已存在");
+        }
+        if (!"student".equals(role) && !"teacher".equals(role) && !"admin".equals(role)) {
+            throw new RuntimeException("角色无效，可选值：student、teacher、admin");
         }
         User user = new User();
         user.setUsername(username);

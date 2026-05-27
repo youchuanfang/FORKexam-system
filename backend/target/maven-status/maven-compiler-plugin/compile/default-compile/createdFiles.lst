@@ -1,0 +1,14 @@
+com\exam\ExamApplication.class
+com\exam\config\SecurityConfig.class
+com\exam\repository\UserRepository.class
+com\exam\service\impl\UserServiceImpl.class
+com\exam\utils\JwtUtil.class
+com\exam\controller\UserController.class
+com\exam\entity\User.class
+com\exam\service\UserService.class
+com\exam\config\WebConfig.class
+com\exam\common\GlobalExceptionHandler.class
+com\exam\config\JwtInterceptor.class
+com\exam\common\Result.class
+com\exam\common\UserContext.class
+com\exam\config\CorsConfig.class
