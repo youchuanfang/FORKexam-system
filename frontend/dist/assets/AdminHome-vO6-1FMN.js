@@ -1,0 +1,1 @@
+import{_ as s,b as c,c as e,o as a}from"./index-D6Bdg9HT.js";const t={},n={class:"home-page"};function r(d,o){return a(),c("div",n,[...o[0]||(o[0]=[e("div",{class:"welcome-card"},[e("h1",null,"管理员首页"),e("p",null,"欢迎使用在线考试系统，你可以管理用户和系统设置。")],-1)])])}const _=s(t,[["render",r],["__scopeId","data-v-60f2b75c"]]);export{_ as default};
