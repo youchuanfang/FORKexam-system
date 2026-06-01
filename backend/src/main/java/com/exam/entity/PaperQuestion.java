@@ -16,7 +16,7 @@ public class PaperQuestion {
     @Column(name = "question_id")
     private Integer questionId;
 
-    @Column(precision = 5, scale = 1)
+    @Column
     private Double score;
 
     public PaperQuestion() {}

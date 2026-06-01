@@ -23,7 +23,7 @@ public class ExamRecord {
     @Column(name = "submit_time")
     private LocalDateTime submitTime;
 
-    @Column(name = "total_score", precision = 5, scale = 1)
+    @Column(name = "total_score")
     private Double totalScore;
 
     public ExamRecord() {}
