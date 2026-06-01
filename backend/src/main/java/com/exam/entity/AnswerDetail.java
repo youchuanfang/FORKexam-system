@@ -22,7 +22,7 @@ public class AnswerDetail {
     @Column(name = "is_correct")
     private Boolean isCorrect;
 
-    @Column(name = "score_got", precision = 5, scale = 1)
+    @Column(name = "score_got")
     private Double scoreGot;
 
     public AnswerDetail() {}
