@@ -17,6 +17,30 @@ const routes = [
     meta: { requiresAuth: true, role: 'student' }
   },
   {
+    path: '/student/papers/:paperId',
+    name: 'StudentPaperDetail',
+    component: () => import('../views/student/StudentPaperDetail.vue'),
+    meta: { requiresAuth: true, role: 'student' }
+  },
+  {
+    path: '/student/exam/:recordId',
+    name: 'StudentExam',
+    component: () => import('../views/student/StudentExam.vue'),
+    meta: { requiresAuth: true, role: 'student' }
+  },
+  {
+    path: '/student/records',
+    name: 'StudentRecords',
+    component: () => import('../views/student/StudentRecords.vue'),
+    meta: { requiresAuth: true, role: 'student' }
+  },
+  {
+    path: '/student/records/:recordId',
+    name: 'StudentRecordDetail',
+    component: () => import('../views/student/StudentRecordDetail.vue'),
+    meta: { requiresAuth: true, role: 'student' }
+  },
+  {
     path: '/teacher',
     name: 'TeacherHome',
     component: () => import('../views/teacher/TeacherHome.vue'),
