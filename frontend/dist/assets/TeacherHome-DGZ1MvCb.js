@@ -1,0 +1,1 @@
+import{_ as a,d as c,a as e,i as o}from"./index-BC262rKn.js";const t={},r={class:"home-page"};function n(d,s){return o(),c("div",r,[...s[0]||(s[0]=[e("div",{class:"welcome-card"},[e("h1",null,"教师首页"),e("p",null,"欢迎使用在线考试系统，你可以管理题库和试卷。")],-1)])])}const _=a(t,[["render",n],["__scopeId","data-v-bf87021c"]]);export{_ as default};

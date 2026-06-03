@@ -7,6 +7,8 @@ public class StartExamResponse {
     private Integer paperId;
     private String title;
     private LocalDateTime startTime;
+    private LocalDateTime openStartTime;
+    private LocalDateTime openEndTime;
     private Integer duration;
     private java.util.List<QuestionDTO> questions;
 
@@ -20,6 +22,10 @@ public class StartExamResponse {
     public void setTitle(String title) { this.title = title; }
     public LocalDateTime getStartTime() { return startTime; }
     public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }
+    public LocalDateTime getOpenStartTime() { return openStartTime; }
+    public void setOpenStartTime(LocalDateTime openStartTime) { this.openStartTime = openStartTime; }
+    public LocalDateTime getOpenEndTime() { return openEndTime; }
+    public void setOpenEndTime(LocalDateTime openEndTime) { this.openEndTime = openEndTime; }
     public Integer getDuration() { return duration; }
     public void setDuration(Integer duration) { this.duration = duration; }
     public java.util.List<QuestionDTO> getQuestions() { return questions; }

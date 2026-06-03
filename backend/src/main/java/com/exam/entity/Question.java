@@ -22,6 +22,9 @@ public class Question {
     @Column(columnDefinition = "NVARCHAR(MAX)")
     private String answer;
 
+    @Column(name = "reference_answer", columnDefinition = "NVARCHAR(MAX)")
+    private String referenceAnswer;
+
     @Column(name = "course_id")
     private Integer courseId;
 
@@ -37,6 +40,8 @@ public class Question {
     public void setOptions(String options) { this.options = options; }
     public String getAnswer() { return answer; }
     public void setAnswer(String answer) { this.answer = answer; }
+    public String getReferenceAnswer() { return referenceAnswer; }
+    public void setReferenceAnswer(String referenceAnswer) { this.referenceAnswer = referenceAnswer; }
     public Integer getCourseId() { return courseId; }
     public void setCourseId(Integer courseId) { this.courseId = courseId; }
 }
