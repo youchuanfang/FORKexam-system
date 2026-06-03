@@ -45,9 +45,16 @@ BEGIN
         content NVARCHAR(MAX),
         options NVARCHAR(MAX),
         answer NVARCHAR(MAX),
+        reference_answer NVARCHAR(MAX),
         course_id INT,
         CONSTRAINT CK_questions_type CHECK (type IN ('single_choice','multi_choice','true_false','fill_blank','short_answer'))
     );
+END
+GO
+
+IF COL_LENGTH('questions', 'reference_answer') IS NULL
+BEGIN
+    ALTER TABLE questions ADD reference_answer NVARCHAR(MAX) NULL;
 END
 GO
 
@@ -61,8 +68,29 @@ BEGIN
         title NVARCHAR(100),
         duration INT,
         created_by INT,
+        teacher_open_answer BIT NOT NULL DEFAULT 0,
+        open_start_time DATETIME2 NULL,
+        open_end_time DATETIME2 NULL,
         CONSTRAINT FK_papers_created_by FOREIGN KEY (created_by) REFERENCES users(id)
     );
+END
+GO
+
+IF COL_LENGTH('papers', 'teacher_open_answer') IS NULL
+BEGIN
+    ALTER TABLE papers ADD teacher_open_answer BIT NOT NULL DEFAULT 0;
+END
+GO
+
+IF COL_LENGTH('papers', 'open_start_time') IS NULL
+BEGIN
+    ALTER TABLE papers ADD open_start_time DATETIME2 NULL;
+END
+GO
+
+IF COL_LENGTH('papers', 'open_end_time') IS NULL
+BEGIN
+    ALTER TABLE papers ADD open_end_time DATETIME2 NULL;
 END
 GO
 

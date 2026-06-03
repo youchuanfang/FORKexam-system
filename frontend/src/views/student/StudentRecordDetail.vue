@@ -32,6 +32,11 @@
               <p>{{ answer.studentAnswer || '未作答' }}</p>
             </div>
             <p class="result-text">{{ resultText(answer) }}</p>
+            <!-- 教师端预留能力：仅在教师开放答案且考试已结束后，学生端才展示标准答案/参考答案。 -->
+            <div v-if="shouldShowCorrectAnswer(answer)" class="correct-answer">
+              <span>{{ answer.type === 'short_answer' ? '参考答案' : '正确答案' }}</span>
+              <p>{{ getCorrectAnswer(answer) }}</p>
+            </div>
           </article>
         </div>
         <p v-else class="state-text">暂无答题明细。</p>
@@ -41,7 +46,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getExamRecordDetail } from '../../api/student'
 
@@ -58,12 +63,67 @@ const labels = {
   short_answer: '简答题'
 }
 
+const objectiveTypes = ['single_choice', 'multi_choice', 'true_false', 'fill_blank']
+
 function typeLabel(type) {
   return labels[type] || type || '题目'
 }
 
 function formatTime(value) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-'
+}
+
+function parseLocalDateTime(value) {
+  if (!value) {
+    return null
+  }
+  return new Date(String(value).replace(' ', 'T'))
+}
+
+const isExamEnded = computed(() => {
+  if (!record.value) {
+    return false
+  }
+  if (record.value.openEndTime) {
+    const openEndTime = parseLocalDateTime(record.value.openEndTime)
+    return openEndTime ? Date.now() >= openEndTime.getTime() : false
+  }
+  if (record.value.submitTime) {
+    return true
+  }
+
+  const startTime = parseLocalDateTime(record.value.startTime)
+  const duration = Number(record.value.duration || 0)
+  if (!startTime || !duration) {
+    return false
+  }
+
+  return Date.now() >= startTime.getTime() + duration * 60 * 1000
+})
+
+const canShowAnswers = computed(() => {
+  return record.value?.teacherOpenAnswer === true && isExamEnded.value
+})
+
+function getCorrectAnswer(answer) {
+  if (!answer) {
+    return ''
+  }
+  if (answer.type === 'short_answer') {
+    // 教师端预留字段：主观题参考答案由后端从 questions.reference_answer 或 questions.answer 提供。
+    return record.value?.referenceAnswerMap?.[answer.questionId] || ''
+  }
+  return answer.correctAnswer || ''
+}
+
+function shouldShowCorrectAnswer(answer) {
+  if (!canShowAnswers.value) {
+    return false
+  }
+  if (answer.type === 'short_answer') {
+    return Boolean(getCorrectAnswer(answer))
+  }
+  return objectiveTypes.includes(answer.type) && Boolean(getCorrectAnswer(answer))
 }
 
 function resultText(answer) {
@@ -203,6 +263,26 @@ h1 {
 .result-text {
   color: #2563eb;
   margin-top: 10px;
+}
+
+.correct-answer {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.correct-answer span {
+  color: #15803d;
+  display: block;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.correct-answer p {
+  color: #166534;
+  white-space: pre-wrap;
 }
 
 .secondary-btn {

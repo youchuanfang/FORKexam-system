@@ -14,6 +14,8 @@ public class PaperDetailDTO {
     private Double bestScore;
     private String status;
     private String statusText;
+    // Reserved for teacher-side paper settings: whether students may view answers after exam end.
+    private Boolean teacherOpenAnswer;
     private List<QuestionDTO> questions;
 
     public PaperDetailDTO() {}
@@ -40,6 +42,8 @@ public class PaperDetailDTO {
     public void setStatus(String status) { this.status = status; }
     public String getStatusText() { return statusText; }
     public void setStatusText(String statusText) { this.statusText = statusText; }
+    public Boolean getTeacherOpenAnswer() { return teacherOpenAnswer; }
+    public void setTeacherOpenAnswer(Boolean teacherOpenAnswer) { this.teacherOpenAnswer = teacherOpenAnswer; }
     public List<QuestionDTO> getQuestions() { return questions; }
     public void setQuestions(List<QuestionDTO> questions) { this.questions = questions; }
 }

@@ -26,7 +26,7 @@
 
             <div v-if="question.type === 'single_choice'" class="answer-area">
               <label v-for="option in parseOptions(question.options)" :key="option" class="choice-line">
-                <input v-model="answers[question.questionId]" type="radio" :name="`q-${question.questionId}`" :value="option" />
+                <input v-model="answers[question.questionId]" type="radio" :name="`q-${question.questionId}`" :value="optionValue(option)" />
                 <span>{{ option }}</span>
               </label>
               <input v-if="parseOptions(question.options).length === 0" v-model="answers[question.questionId]" class="text-input" placeholder="请输入答案" />
@@ -35,9 +35,9 @@
             <div v-else-if="question.type === 'multi_choice'" class="answer-area">
               <label v-for="option in parseOptions(question.options)" :key="option" class="choice-line">
                 <input
-                  :checked="selectedMulti(question.questionId).includes(option)"
+                  :checked="selectedMulti(question.questionId).includes(optionValue(option))"
                   type="checkbox"
-                  @change="toggleMulti(question.questionId, option)"
+                  @change="toggleMulti(question.questionId, optionValue(option))"
                 />
                 <span>{{ option }}</span>
               </label>
@@ -117,11 +117,36 @@ function parseOptions(options) {
         return parsed.map(item => String(item).trim()).filter(Boolean)
       }
     } catch (e) {
-      return options.split(/[,，]/).map(item => item.trim()).filter(Boolean)
+      return splitOptionText(options)
     }
-    return options.split(/[,，]/).map(item => item.trim()).filter(Boolean)
+    return splitOptionText(options)
   }
   return []
+}
+
+function splitOptionText(options) {
+  const text = String(options).trim()
+  if (!text) {
+    return []
+  }
+
+  const lines = text.split(/\r?\n/).map(item => item.trim()).filter(Boolean)
+  if (lines.length > 1) {
+    return lines
+  }
+
+  // Supports compact teacher-entered text such as "A. foo B. bar C. baz D. qux".
+  const compactOptions = text.match(/[A-Za-z][\.\、．)]\s*.*?(?=\s+[A-Za-z][\.\、．)]\s*|$)/g)
+  if (compactOptions && compactOptions.length > 1) {
+    return compactOptions.map(item => item.trim())
+  }
+
+  return text.split(/[,，；;]/).map(item => item.trim()).filter(Boolean)
+}
+
+function optionValue(option) {
+  const match = String(option).trim().match(/^([A-Za-z])[\.\、．)]/)
+  return match ? match[1].toUpperCase() : option
 }
 
 function selectedMulti(questionId) {
@@ -149,21 +174,26 @@ function applyExamData(data) {
     paperId: data.paperId,
     title: data.title || data.paperTitle,
     duration: data.duration,
+    openStartTime: data.openStartTime,
+    openEndTime: data.openEndTime,
     startTime: data.startTime,
     questions: data.questions || []
   }
-  setupTimer(data.startTime, data.duration)
+  setupTimer(data.startTime, data.duration, data.openEndTime)
 }
 
-function setupTimer(startTime, duration) {
+function setupTimer(startTime, duration, openEndTime) {
   clearTimer()
   const durationMinutes = Number(duration || 0)
-  if (durationMinutes <= 0) {
+  const start = startTime ? new Date(startTime).getTime() : Date.now()
+  const durationEnd = durationMinutes > 0 ? start + durationMinutes * 60 * 1000 : null
+  const paperEnd = openEndTime ? new Date(openEndTime).getTime() : null
+  const endCandidates = [durationEnd, paperEnd].filter(value => Number.isFinite(value))
+  if (endCandidates.length === 0) {
     remainingSeconds.value = 0
     return
   }
-  const start = startTime ? new Date(startTime).getTime() : Date.now()
-  const end = start + durationMinutes * 60 * 1000
+  const end = Math.min(...endCandidates)
   const tick = () => {
     remainingSeconds.value = Math.max(0, Math.ceil((end - Date.now()) / 1000))
     if (remainingSeconds.value <= 0) {

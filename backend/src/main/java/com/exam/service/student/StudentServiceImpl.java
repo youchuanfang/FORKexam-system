@@ -108,6 +108,8 @@ public class StudentServiceImpl implements StudentService {
         response.setPaperId(paper.getId());
         response.setTitle(paper.getTitle());
         response.setStartTime(record.getStartTime());
+        response.setOpenStartTime(paper.getOpenStartTime());
+        response.setOpenEndTime(paper.getOpenEndTime());
         response.setDuration(paper.getDuration());
         response.setQuestions(buildQuestions(paper.getId()));
         return response;
@@ -122,6 +124,8 @@ public class StudentServiceImpl implements StudentService {
         if (record.getSubmitTime() != null) {
             throw new RuntimeException("该考试记录已提交，不能重复提交");
         }
+        Paper paper = getPaperOrThrow(record.getPaperId());
+        ensurePaperOpenForAnswering(paper);
 
         List<PaperQuestion> paperQuestions = paperQuestionRepository.findByPaperId(record.getPaperId());
         if (paperQuestions.isEmpty()) {
@@ -200,9 +204,16 @@ public class StudentServiceImpl implements StudentService {
         Map<Integer, Question> questionMap = questionRepository.findAllById(scoreMap.keySet()).stream()
                 .collect(Collectors.toMap(Question::getId, Function.identity()));
 
+        boolean teacherOpenAnswer = Boolean.TRUE.equals(paper.getTeacherOpenAnswer());
+        boolean canReturnAnswers = teacherOpenAnswer && isAnswerReviewTimeReached(record, paper);
         List<AnswerDetailDTO> answers = answerDetailRepository.findByRecordId(record.getId()).stream()
                 .sorted(Comparator.comparing(AnswerDetail::getQuestionId, Comparator.nullsLast(Integer::compareTo)))
-                .map(detail -> toAnswerDetailDTO(detail, questionMap.get(detail.getQuestionId()), scoreMap.get(detail.getQuestionId())))
+                .map(detail -> toAnswerDetailDTO(
+                        detail,
+                        questionMap.get(detail.getQuestionId()),
+                        scoreMap.get(detail.getQuestionId()),
+                        canReturnAnswers
+                ))
                 .collect(Collectors.toList());
 
         ExamRecordDetailDTO dto = new ExamRecordDetailDTO();
@@ -210,9 +221,13 @@ public class StudentServiceImpl implements StudentService {
         dto.setPaperId(record.getPaperId());
         dto.setPaperTitle(paper.getTitle());
         dto.setDuration(paper.getDuration());
+        dto.setOpenStartTime(paper.getOpenStartTime());
+        dto.setOpenEndTime(paper.getOpenEndTime());
         dto.setStartTime(record.getStartTime());
         dto.setSubmitTime(record.getSubmitTime());
         dto.setTotalScore(record.getTotalScore());
+        dto.setTeacherOpenAnswer(teacherOpenAnswer);
+        dto.setReferenceAnswerMap(canReturnAnswers ? buildReferenceAnswerMap(questionMap) : new HashMap<>());
         if (record.getSubmitTime() == null) {
             dto.setQuestions(buildQuestions(record.getPaperId()));
             dto.setAnswers(new ArrayList<>());
@@ -237,6 +252,7 @@ public class StudentServiceImpl implements StudentService {
         dto.setBestScore(summary.getBestScore());
         dto.setStatus(summary.getStatus());
         dto.setStatusText(summary.getStatusText());
+        dto.setTeacherOpenAnswer(Boolean.TRUE.equals(paper.getTeacherOpenAnswer()));
         dto.setQuestions(new ArrayList<>());
         return dto;
     }
@@ -281,13 +297,20 @@ public class StudentServiceImpl implements StudentService {
                 .orElse(null);
 
         PaperListDTO dto = new PaperListDTO(paper.getId(), paper.getTitle(), paper.getDuration());
-        dto.setOpenStartTime(null); // Reserved for future teacher-side openStartTime support.
-        dto.setOpenEndTime(null);   // Reserved for future teacher-side openEndTime support.
+        dto.setOpenStartTime(formatDateTime(paper.getOpenStartTime()));
+        dto.setOpenEndTime(formatDateTime(paper.getOpenEndTime()));
         dto.setMaxAttempts(maxAttempts);
         dto.setAttemptCount(attemptCount);
         dto.setRemainingAttempts(remainingAttempts);
         dto.setBestScore(bestScore);
-        if (remainingAttempts <= 0) {
+        LocalDateTime now = LocalDateTime.now();
+        if (paper.getOpenStartTime() != null && now.isBefore(paper.getOpenStartTime())) {
+            dto.setStatus("NOT_OPEN");
+            dto.setStatusText("考试未开放");
+        } else if (paper.getOpenEndTime() != null && !now.isBefore(paper.getOpenEndTime())) {
+            dto.setStatus("CLOSED");
+            dto.setStatusText("考试已截止");
+        } else if (remainingAttempts <= 0) {
             dto.setStatus("NO_ATTEMPTS");
             dto.setStatusText("作答次数已用完");
         } else {
@@ -295,6 +318,10 @@ public class StudentServiceImpl implements StudentService {
             dto.setStatusText("已开放");
         }
         return dto;
+    }
+
+    private String formatDateTime(LocalDateTime value) {
+        return value == null ? null : value.toString();
     }
 
     private void validateSubmittedQuestionIds(SubmitExamRequest request, Set<Integer> paperQuestionIds) {
@@ -427,6 +454,16 @@ public class StudentServiceImpl implements StudentService {
         }
     }
 
+    private void ensurePaperOpenForAnswering(Paper paper) {
+        LocalDateTime now = LocalDateTime.now();
+        if (paper.getOpenStartTime() != null && now.isBefore(paper.getOpenStartTime())) {
+            throw new RuntimeException("考试尚未到开放时间，不能作答");
+        }
+        if (paper.getOpenEndTime() != null && !now.isBefore(paper.getOpenEndTime())) {
+            throw new RuntimeException("考试已截止，不能作答");
+        }
+    }
+
     private ExamRecordDTO toExamRecordDTO(ExamRecord record, Paper paper) {
         ExamRecordDTO dto = new ExamRecordDTO();
         dto.setRecordId(record.getId());
@@ -438,7 +475,10 @@ public class StudentServiceImpl implements StudentService {
         return dto;
     }
 
-    private AnswerDetailDTO toAnswerDetailDTO(AnswerDetail detail, Question question, PaperQuestion paperQuestion) {
+    private AnswerDetailDTO toAnswerDetailDTO(AnswerDetail detail,
+                                              Question question,
+                                              PaperQuestion paperQuestion,
+                                              boolean canReturnAnswers) {
         AnswerDetailDTO dto = new AnswerDetailDTO();
         dto.setQuestionId(detail.getQuestionId());
         dto.setStudentAnswer(detail.getStudentAnswer());
@@ -448,11 +488,51 @@ public class StudentServiceImpl implements StudentService {
             dto.setType(question.getType());
             dto.setContent(question.getContent());
             dto.setOptions(question.getOptions());
+            if (canReturnAnswers && AUTO_GRADE_TYPES.contains(question.getType())) {
+                dto.setCorrectAnswer(question.getAnswer());
+            }
         }
         if (paperQuestion != null) {
             dto.setScore(paperQuestion.getScore());
         }
         return dto;
+    }
+
+    private boolean isAnswerReviewTimeReached(ExamRecord record, Paper paper) {
+        if (paper.getOpenEndTime() != null) {
+            return !LocalDateTime.now().isBefore(paper.getOpenEndTime());
+        }
+        if (record.getSubmitTime() != null) {
+            return true;
+        }
+        if (record.getStartTime() == null || paper.getDuration() == null) {
+            return false;
+        }
+        return !LocalDateTime.now().isBefore(record.getStartTime().plusMinutes(paper.getDuration()));
+    }
+
+    private Map<Integer, String> buildReferenceAnswerMap(Map<Integer, Question> questionMap) {
+        Map<Integer, String> referenceAnswerMap = new HashMap<>();
+        for (Question question : questionMap.values()) {
+            if (question == null || !"short_answer".equals(question.getType())) {
+                continue;
+            }
+            String referenceAnswer = firstNonBlank(question.getReferenceAnswer(), question.getAnswer());
+            if (referenceAnswer != null) {
+                referenceAnswerMap.put(question.getId(), referenceAnswer);
+            }
+        }
+        return referenceAnswerMap;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.trim().isEmpty()) {
+            return first;
+        }
+        if (second != null && !second.trim().isEmpty()) {
+            return second;
+        }
+        return null;
     }
 
     private record GradeResult(Boolean isCorrect, Double scoreGot) {}

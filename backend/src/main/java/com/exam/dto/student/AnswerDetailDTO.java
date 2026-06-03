@@ -9,6 +9,8 @@ public class AnswerDetailDTO {
     private Boolean isCorrect;
     private Double score;
     private Double scoreGot;
+    // Reserved for teacher-side answer publishing. Filled only when students are allowed to view answers.
+    private String correctAnswer;
 
     public AnswerDetailDTO() {}
 
@@ -28,4 +30,6 @@ public class AnswerDetailDTO {
     public void setScore(Double score) { this.score = score; }
     public Double getScoreGot() { return scoreGot; }
     public void setScoreGot(Double scoreGot) { this.scoreGot = scoreGot; }
+    public String getCorrectAnswer() { return correctAnswer; }
+    public void setCorrectAnswer(String correctAnswer) { this.correctAnswer = correctAnswer; }
 }
