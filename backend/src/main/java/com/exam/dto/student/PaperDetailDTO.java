@@ -16,6 +16,7 @@ public class PaperDetailDTO {
     private String statusText;
     // Reserved for teacher-side paper settings: whether students may view answers after exam end.
     private Boolean teacherOpenAnswer;
+    private Integer inProgressRecordId;
     private List<QuestionDTO> questions;
 
     public PaperDetailDTO() {}
@@ -44,6 +45,8 @@ public class PaperDetailDTO {
     public void setStatusText(String statusText) { this.statusText = statusText; }
     public Boolean getTeacherOpenAnswer() { return teacherOpenAnswer; }
     public void setTeacherOpenAnswer(Boolean teacherOpenAnswer) { this.teacherOpenAnswer = teacherOpenAnswer; }
+    public Integer getInProgressRecordId() { return inProgressRecordId; }
+    public void setInProgressRecordId(Integer inProgressRecordId) { this.inProgressRecordId = inProgressRecordId; }
     public List<QuestionDTO> getQuestions() { return questions; }
     public void setQuestions(List<QuestionDTO> questions) { this.questions = questions; }
 }

@@ -11,6 +11,7 @@ public class StartExamResponse {
     private LocalDateTime openEndTime;
     private Integer duration;
     private java.util.List<QuestionDTO> questions;
+    private Boolean resumed;
 
     public StartExamResponse() {}
 
@@ -30,4 +31,6 @@ public class StartExamResponse {
     public void setDuration(Integer duration) { this.duration = duration; }
     public java.util.List<QuestionDTO> getQuestions() { return questions; }
     public void setQuestions(java.util.List<QuestionDTO> questions) { this.questions = questions; }
+    public Boolean getResumed() { return resumed; }
+    public void setResumed(Boolean resumed) { this.resumed = resumed; }
 }

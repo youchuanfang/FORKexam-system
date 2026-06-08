@@ -32,7 +32,6 @@
               <p>{{ answer.studentAnswer || '未作答' }}</p>
             </div>
             <p class="result-text">{{ resultText(answer) }}</p>
-            <!-- 教师端预留能力：仅在教师开放答案且考试已结束后，学生端才展示标准答案/参考答案。 -->
             <div v-if="shouldShowCorrectAnswer(answer)" class="correct-answer">
               <span>{{ answer.type === 'short_answer' ? '参考答案' : '正确答案' }}</span>
               <p>{{ getCorrectAnswer(answer) }}</p>
@@ -46,7 +45,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getExamRecordDetail } from '../../api/student'
 
@@ -73,51 +72,16 @@ function formatTime(value) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-'
 }
 
-function parseLocalDateTime(value) {
-  if (!value) {
-    return null
-  }
-  return new Date(String(value).replace(' ', 'T'))
-}
-
-const isExamEnded = computed(() => {
-  if (!record.value) {
-    return false
-  }
-  if (record.value.openEndTime) {
-    const openEndTime = parseLocalDateTime(record.value.openEndTime)
-    return openEndTime ? Date.now() >= openEndTime.getTime() : false
-  }
-  if (record.value.submitTime) {
-    return true
-  }
-
-  const startTime = parseLocalDateTime(record.value.startTime)
-  const duration = Number(record.value.duration || 0)
-  if (!startTime || !duration) {
-    return false
-  }
-
-  return Date.now() >= startTime.getTime() + duration * 60 * 1000
-})
-
-const canShowAnswers = computed(() => {
-  return record.value?.teacherOpenAnswer === true && isExamEnded.value
-})
-
 function getCorrectAnswer(answer) {
-  if (!answer) {
-    return ''
-  }
+  if (!answer) return ''
   if (answer.type === 'short_answer') {
-    // 教师端预留字段：主观题参考答案由后端从 questions.reference_answer 或 questions.answer 提供。
     return record.value?.referenceAnswerMap?.[answer.questionId] || ''
   }
   return answer.correctAnswer || ''
 }
 
 function shouldShowCorrectAnswer(answer) {
-  if (!canShowAnswers.value) {
+  if (record.value?.teacherOpenAnswer !== true) {
     return false
   }
   if (answer.type === 'short_answer') {
@@ -160,154 +124,30 @@ onMounted(loadRecord)
 </script>
 
 <style scoped>
-.student-page {
-  min-height: 100vh;
-  background: #f5f7fb;
-  padding: 32px;
-}
-
-.page-header,
-.panel {
-  max-width: 980px;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.panel {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 24px;
-}
-
-.record-summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 22px;
-}
-
-.record-summary strong {
-  color: #111827;
-  font-size: 28px;
-}
-
-h1,
-p {
-  margin: 0;
-}
-
-h1 {
-  color: #111827;
-  font-size: 26px;
-  margin-bottom: 8px;
-}
-
-.record-summary p,
-.state-text {
-  color: #6b7280;
-}
-
-.answer-list {
-  display: grid;
-  gap: 12px;
-}
-
-.answer-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.answer-head {
-  display: flex;
-  justify-content: space-between;
-  color: #374151;
-  margin-bottom: 10px;
-}
-
-.question-content {
-  color: #111827;
-  line-height: 1.6;
-}
-
-.options-text {
-  background: #f9fafb;
-  border-radius: 6px;
-  color: #374151;
-  font-family: inherit;
-  margin: 12px 0;
-  padding: 12px;
-  white-space: pre-wrap;
-}
-
-.student-answer {
-  background: #f9fafb;
-  border-radius: 6px;
-  margin-top: 12px;
-  padding: 12px;
-}
-
-.student-answer span {
-  color: #6b7280;
-  display: block;
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-
-.result-text {
-  color: #2563eb;
-  margin-top: 10px;
-}
-
-.correct-answer {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 6px;
-  margin-top: 12px;
-  padding: 12px;
-}
-
-.correct-answer span {
-  color: #15803d;
-  display: block;
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-
-.correct-answer p {
-  color: #166534;
-  white-space: pre-wrap;
-}
-
-.secondary-btn {
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  color: #374151;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 9px 14px;
-  text-decoration: none;
-}
-
-.error-text {
-  color: #dc2626;
-}
-
+.student-page { min-height: 100vh; background: #f5f7fb; padding: 32px; }
+.page-header, .panel { max-width: 980px; margin: 0 auto; }
+.page-header { display: flex; gap: 10px; margin-bottom: 18px; }
+.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
+.record-summary { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+.record-summary strong { color: #111827; font-size: 28px; }
+h1, p { margin: 0; }
+h1 { color: #111827; font-size: 26px; margin-bottom: 8px; }
+.record-summary p, .state-text { color: #6b7280; }
+.answer-list { display: grid; gap: 12px; }
+.answer-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+.answer-head { display: flex; justify-content: space-between; color: #374151; margin-bottom: 10px; }
+.question-content { color: #111827; line-height: 1.6; }
+.options-text { background: #f9fafb; border-radius: 6px; color: #374151; font-family: inherit; margin: 12px 0; padding: 12px; white-space: pre-wrap; }
+.student-answer { background: #f9fafb; border-radius: 6px; margin-top: 12px; padding: 12px; }
+.student-answer span { color: #6b7280; display: block; font-size: 13px; margin-bottom: 6px; }
+.result-text { color: #2563eb; margin-top: 10px; }
+.correct-answer { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; margin-top: 12px; padding: 12px; }
+.correct-answer span { color: #15803d; display: block; font-size: 13px; margin-bottom: 6px; }
+.correct-answer p { color: #166534; white-space: pre-wrap; }
+.secondary-btn { background: #fff; border: 1px solid #d1d5db; border-radius: 6px; color: #374151; cursor: pointer; font-size: 14px; padding: 9px 14px; text-decoration: none; }
+.error-text { color: #dc2626; }
 @media (max-width: 720px) {
-  .student-page {
-    padding: 20px;
-  }
-
-  .record-summary,
-  .answer-head {
-    flex-direction: column;
-  }
+  .student-page { padding: 20px; }
+  .record-summary, .answer-head { flex-direction: column; }
 }
 </style>

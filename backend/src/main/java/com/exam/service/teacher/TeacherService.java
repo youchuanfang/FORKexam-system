@@ -20,6 +20,7 @@ public interface TeacherService {
     void deletePaper(Integer paperId);
 
     // Paper questions
+    List<PaperQuestionDTO> getPaperQuestions(Integer paperId);
     void assignQuestions(Integer paperId, List<PaperQuestionDTO> questions);
 
     // Exam records

@@ -26,7 +26,6 @@
       </p>
     </div>
 
-    <!-- 注册弹窗 -->
     <div v-if="showRegister" class="modal-overlay" @click.self="showRegister = false">
       <div class="modal-card">
         <h2>用户注册</h2>
@@ -62,15 +61,14 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
+import { setAuth } from '../utils/auth'
 
 const router = useRouter()
 
-// 登录表单
 const username = ref('')
 const password = ref('')
 const role = ref('student')
 
-// 注册表单
 const showRegister = ref(false)
 const regUsername = ref('')
 const regPassword = ref('')
@@ -87,8 +85,7 @@ async function handleLogin() {
       password: password.value
     })
     if (res.code === 200) {
-      localStorage.setItem('token', res.data.token)
-      localStorage.setItem('role', res.data.role)
+      setAuth(res.data.token, res.data.role)
       router.push(roleMap[res.data.role] || '/')
     } else {
       alert(res.message || '登录失败')
@@ -108,8 +105,7 @@ async function handleRegister() {
     })
     if (res.code === 200) {
       regSuccess.value = true
-      regMessage.value = '注册成功！请登录'
-      // 2秒后自动关闭弹窗
+      regMessage.value = '注册成功，请登录'
       setTimeout(() => {
         showRegister.value = false
         regMessage.value = ''
@@ -216,13 +212,9 @@ h2 {
   text-decoration: underline;
 }
 
-/* 注册弹窗 */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
@@ -245,34 +237,24 @@ h2 {
   margin-top: 10px;
 }
 
-.btn-primary {
-  flex: 1;
-  padding: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-}
-
+.btn-primary,
 .btn-cancel {
   flex: 1;
   padding: 12px;
-  background: #eee;
-  color: #333;
   border: none;
   border-radius: 6px;
   font-size: 15px;
   cursor: pointer;
 }
 
-.btn-cancel:hover {
-  background: #ddd;
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.btn-cancel {
+  background: #eee;
+  color: #333;
 }
 
 .error-msg {

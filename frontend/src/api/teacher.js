@@ -54,6 +54,11 @@ export function assignQuestions(paperId, questions) {
   return request.post(`/api/teacher/papers/${paperId}/questions`, questions)
 }
 
+// 获取试卷已选题目
+export function getPaperQuestions(paperId) {
+  return request.get(`/api/teacher/papers/${paperId}/questions`)
+}
+
 // ==================== 阅卷评分 ====================
 
 // 查看考试记录

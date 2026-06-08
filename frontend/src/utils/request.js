@@ -1,5 +1,6 @@
 import axios from 'axios'
 import router from '../router'
+import { clearAuth } from './auth'
 
 const request = axios.create({
   baseURL: '',
@@ -28,8 +29,7 @@ request.interceptors.response.use(
   },
   error => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('role')
+      clearAuth()
       router.push('/login')
     }
     return Promise.reject(error)

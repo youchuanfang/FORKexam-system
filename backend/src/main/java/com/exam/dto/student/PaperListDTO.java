@@ -12,6 +12,7 @@ public class PaperListDTO {
     private Double bestScore;
     private String status;
     private String statusText;
+    private Integer inProgressRecordId;
 
     public PaperListDTO() {}
 
@@ -43,4 +44,6 @@ public class PaperListDTO {
     public void setStatus(String status) { this.status = status; }
     public String getStatusText() { return statusText; }
     public void setStatusText(String statusText) { this.statusText = statusText; }
+    public Integer getInProgressRecordId() { return inProgressRecordId; }
+    public void setInProgressRecordId(Integer inProgressRecordId) { this.inProgressRecordId = inProgressRecordId; }
 }

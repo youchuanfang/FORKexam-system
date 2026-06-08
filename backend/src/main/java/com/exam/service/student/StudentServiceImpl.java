@@ -86,11 +86,18 @@ public class StudentServiceImpl implements StudentService {
     public StartExamResponse startExam(StartExamRequest request) {
         Integer studentId = ensureStudent();
         if (request == null || request.getPaperId() == null) {
-            throw new RuntimeException("paperId涓嶈兘涓虹┖");
+            throw new RuntimeException("paperId不能为空");
         }
 
         Paper paper = getPaperOrThrow(request.getPaperId());
         List<ExamRecord> studentRecords = examRecordRepository.findByStudentId(studentId);
+        ExamRecord inProgress = findInProgressRecord(studentRecords, paper.getId());
+        ensurePaperOpenForAnswering(paper);
+
+        if (inProgress != null) {
+            return buildStartExamResponse(paper, inProgress, true);
+        }
+
         PaperListDTO availability = buildPaperListDTO(paper, studentRecords);
         if (!"OPEN".equals(availability.getStatus())) {
             throw new RuntimeException(availability.getStatusText());
@@ -103,16 +110,7 @@ public class StudentServiceImpl implements StudentService {
         record.setTotalScore(0.0);
         record = examRecordRepository.save(record);
 
-        StartExamResponse response = new StartExamResponse();
-        response.setRecordId(record.getId());
-        response.setPaperId(paper.getId());
-        response.setTitle(paper.getTitle());
-        response.setStartTime(record.getStartTime());
-        response.setOpenStartTime(paper.getOpenStartTime());
-        response.setOpenEndTime(paper.getOpenEndTime());
-        response.setDuration(paper.getDuration());
-        response.setQuestions(buildQuestions(paper.getId()));
-        return response;
+        return buildStartExamResponse(paper, record, false);
     }
 
     @Override
@@ -122,14 +120,14 @@ public class StudentServiceImpl implements StudentService {
         ExamRecord record = getRecordOrThrow(recordId);
         ensureRecordOwner(record, studentId);
         if (record.getSubmitTime() != null) {
-            throw new RuntimeException("璇ヨ€冭瘯璁板綍宸叉彁浜わ紝涓嶈兘閲嶅鎻愪氦");
+            throw new RuntimeException("该考试记录已提交，不能重复提交");
         }
         Paper paper = getPaperOrThrow(record.getPaperId());
         ensurePaperOpenForAnswering(paper);
 
         List<PaperQuestion> paperQuestions = paperQuestionRepository.findByPaperId(record.getPaperId());
         if (paperQuestions.isEmpty()) {
-            throw new RuntimeException("璇曞嵎娌℃湁棰樼洰锛屼笉鑳芥彁浜");
+            throw new RuntimeException("试卷没有题目，不能提交");
         }
 
         Map<Integer, PaperQuestion> paperQuestionMap = paperQuestions.stream()
@@ -176,7 +174,7 @@ public class StudentServiceImpl implements StudentService {
         response.setRecordId(record.getId());
         response.setTotalScore(totalScore);
         response.setObjectiveScore(objectiveScore);
-        response.setMessage("鎻愪氦鎴愬姛锛屼富瑙傞鏆傛寜0鍒嗚鍏ワ紝寰呮暀甯堟壒鏀");
+        response.setMessage("提交成功，客观题已自动判分，主观题待教师批改");
         return response;
     }
 
@@ -204,8 +202,8 @@ public class StudentServiceImpl implements StudentService {
         Map<Integer, Question> questionMap = questionRepository.findAllById(scoreMap.keySet()).stream()
                 .collect(Collectors.toMap(Question::getId, Function.identity()));
 
-        boolean teacherOpenAnswer = Boolean.TRUE.equals(paper.getTeacherOpenAnswer());
-        boolean canReturnAnswers = teacherOpenAnswer && isAnswerAvailable(paper, record);
+        boolean answerReleased = Boolean.TRUE.equals(paper.getReleaseAnswerFlag());
+        boolean canReturnAnswers = answerReleased && isAnswerAvailable(paper);
         List<AnswerDetailDTO> answers = answerDetailRepository.findByRecordId(record.getId()).stream()
                 .sorted(Comparator.comparing(AnswerDetail::getQuestionId, Comparator.nullsLast(Integer::compareTo)))
                 .map(detail -> toAnswerDetailDTO(
@@ -226,7 +224,7 @@ public class StudentServiceImpl implements StudentService {
         dto.setStartTime(record.getStartTime());
         dto.setSubmitTime(record.getSubmitTime());
         dto.setTotalScore(record.getTotalScore());
-        dto.setTeacherOpenAnswer(teacherOpenAnswer);
+        dto.setTeacherOpenAnswer(answerReleased);
         dto.setReferenceAnswerMap(canReturnAnswers ? buildReferenceAnswerMap(questionMap) : new HashMap<>());
         if (record.getSubmitTime() == null) {
             dto.setQuestions(buildQuestions(record.getPaperId()));
@@ -252,9 +250,24 @@ public class StudentServiceImpl implements StudentService {
         dto.setBestScore(summary.getBestScore());
         dto.setStatus(summary.getStatus());
         dto.setStatusText(summary.getStatusText());
-        dto.setTeacherOpenAnswer(Boolean.TRUE.equals(paper.getTeacherOpenAnswer()));
+        dto.setTeacherOpenAnswer(Boolean.TRUE.equals(paper.getReleaseAnswerFlag()));
+        dto.setInProgressRecordId(summary.getInProgressRecordId());
         dto.setQuestions(new ArrayList<>());
         return dto;
+    }
+
+    private StartExamResponse buildStartExamResponse(Paper paper, ExamRecord record, boolean resumed) {
+        StartExamResponse response = new StartExamResponse();
+        response.setRecordId(record.getId());
+        response.setPaperId(paper.getId());
+        response.setTitle(paper.getTitle());
+        response.setStartTime(record.getStartTime());
+        response.setOpenStartTime(paper.getOpenStartTime());
+        response.setOpenEndTime(paper.getOpenEndTime());
+        response.setDuration(paper.getDuration());
+        response.setQuestions(buildQuestions(paper.getId()));
+        response.setResumed(resumed);
+        return response;
     }
 
     private List<QuestionDTO> buildQuestions(Integer paperId) {
@@ -263,7 +276,7 @@ public class StudentServiceImpl implements StudentService {
                 paperQuestions.stream().map(PaperQuestion::getQuestionId).filter(Objects::nonNull).collect(Collectors.toSet())
         ).stream().collect(Collectors.toMap(Question::getId, Function.identity()));
 
-        List<QuestionDTO> questions = paperQuestions.stream()
+        return paperQuestions.stream()
                 .map(paperQuestion -> {
                     Question question = questionMap.get(paperQuestion.getQuestionId());
                     if (question == null) {
@@ -279,8 +292,6 @@ public class StudentServiceImpl implements StudentService {
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-
-        return questions;
     }
 
     private PaperListDTO buildPaperListDTO(Paper paper, List<ExamRecord> studentRecords) {
@@ -288,9 +299,11 @@ public class StudentServiceImpl implements StudentService {
         List<ExamRecord> recordsForPaper = studentRecords.stream()
                 .filter(record -> Objects.equals(record.getPaperId(), paper.getId()))
                 .collect(Collectors.toList());
+        ExamRecord inProgress = findInProgressRecord(recordsForPaper, paper.getId());
         int attemptCount = recordsForPaper.size();
         int remainingAttempts = Math.max(0, maxAttempts - attemptCount);
         Double bestScore = recordsForPaper.stream()
+                .filter(record -> record.getSubmitTime() != null)
                 .map(ExamRecord::getTotalScore)
                 .filter(Objects::nonNull)
                 .max(Double::compareTo)
@@ -303,21 +316,33 @@ public class StudentServiceImpl implements StudentService {
         dto.setAttemptCount(attemptCount);
         dto.setRemainingAttempts(remainingAttempts);
         dto.setBestScore(bestScore);
+        dto.setInProgressRecordId(inProgress == null ? null : inProgress.getId());
         LocalDateTime now = LocalDateTime.now();
         if (paper.getOpenStartTime() != null && now.isBefore(paper.getOpenStartTime())) {
             dto.setStatus("NOT_OPEN");
-            dto.setStatusText("鑰冭瘯鏈紑鏀");
+            dto.setStatusText("考试未开放");
         } else if (paper.getOpenEndTime() != null && !now.isBefore(paper.getOpenEndTime())) {
             dto.setStatus("CLOSED");
-            dto.setStatusText("鑰冭瘯宸叉埅姝");
+            dto.setStatusText("考试已截止");
+        } else if (inProgress != null) {
+            dto.setStatus("OPEN");
+            dto.setStatusText("可继续作答");
         } else if (remainingAttempts <= 0) {
             dto.setStatus("NO_ATTEMPTS");
-            dto.setStatusText("浣滅瓟娆℃暟宸茬敤瀹");
+            dto.setStatusText("作答次数已用完");
         } else {
             dto.setStatus("OPEN");
-            dto.setStatusText("宸插紑鏀");
+            dto.setStatusText("考试开放中");
         }
         return dto;
+    }
+
+    private ExamRecord findInProgressRecord(List<ExamRecord> records, Integer paperId) {
+        return records.stream()
+                .filter(record -> Objects.equals(record.getPaperId(), paperId))
+                .filter(record -> record.getSubmitTime() == null)
+                .min(Comparator.comparing(ExamRecord::getStartTime, Comparator.nullsLast(LocalDateTime::compareTo)))
+                .orElse(null);
     }
 
     private String formatDateTime(LocalDateTime value) {
@@ -330,10 +355,10 @@ public class StudentServiceImpl implements StudentService {
         }
         for (SubmitAnswerDTO answer : request.getAnswers()) {
             if (answer == null || answer.getQuestionId() == null) {
-                throw new RuntimeException("鎻愪氦绛旀涓瓨鍦ㄧ己灏憅uestionId鐨勯」鐩");
+                throw new RuntimeException("提交答案中存在缺少questionId的项目");
             }
             if (!paperQuestionIds.contains(answer.getQuestionId())) {
-                throw new RuntimeException("鎻愪氦绛旀涓寘鍚笉灞炰簬褰撳墠璇曞嵎鐨勯鐩");
+                throw new RuntimeException("提交答案中包含不属于当前试卷的题目");
             }
         }
     }
@@ -398,20 +423,19 @@ public class StudentServiceImpl implements StudentService {
         return normalizeText(String.valueOf(value));
     }
 
-    private String normalizeMultiChoice(String value) {
+    static String normalizeMultiChoiceValue(String value) {
         if (value == null || value.trim().isEmpty()) {
             return "";
         }
         String text = value.trim();
         if (text.startsWith("[") && text.endsWith("]")) {
-            text = text.substring(1, text.length() - 1)
-                    .replace("\"", "")
-                    .replace("'", "");
+            text = text.substring(1, text.length() - 1);
         }
-        String[] parts = text.split("[,锛宂");
+        text = text.replace("\"", "").replace("'", "");
+        String[] parts = text.split("[,，;；\\s]+");
         List<String> normalized = new ArrayList<>();
         for (String part : parts) {
-            String item = part.trim();
+            String item = part.trim().toUpperCase();
             if (!item.isEmpty()) {
                 normalized.add(item);
             }
@@ -420,47 +444,51 @@ public class StudentServiceImpl implements StudentService {
         return String.join(",", normalized);
     }
 
+    private String normalizeMultiChoice(String value) {
+        return normalizeMultiChoiceValue(value);
+    }
+
     private Integer ensureStudent() {
         Integer userId = UserContext.getUserId();
         String role = UserContext.getRole();
         if (userId == null) {
-            throw new RuntimeException("鏈櫥褰曟垨token鏃犳晥");
+            throw new RuntimeException("未登录或token无效");
         }
         if (!ROLE_STUDENT.equals(role)) {
-            throw new RuntimeException("浠呭鐢熻鑹插彲浠ヨ闂鎺ュ彛");
+            throw new RuntimeException("仅学生角色可以访问该接口");
         }
         return userId;
     }
 
     private Paper getPaperOrThrow(Integer paperId) {
         if (paperId == null) {
-            throw new RuntimeException("paperId涓嶈兘涓虹┖");
+            throw new RuntimeException("paperId不能为空");
         }
         return paperRepository.findById(paperId)
-                .orElseThrow(() -> new RuntimeException("璇曞嵎涓嶅瓨鍦?"));
+                .orElseThrow(() -> new RuntimeException("试卷不存在"));
     }
 
     private ExamRecord getRecordOrThrow(Integer recordId) {
         if (recordId == null) {
-            throw new RuntimeException("recordId涓嶈兘涓虹┖");
+            throw new RuntimeException("recordId不能为空");
         }
         return examRecordRepository.findById(recordId)
-                .orElseThrow(() -> new RuntimeException("鑰冭瘯璁板綍涓嶅瓨鍦?"));
+                .orElseThrow(() -> new RuntimeException("考试记录不存在"));
     }
 
     private void ensureRecordOwner(ExamRecord record, Integer studentId) {
         if (!Objects.equals(record.getStudentId(), studentId)) {
-            throw new RuntimeException("涓嶈兘璁块棶鎴栨彁浜ゅ埆浜虹殑鑰冭瘯璁板綍");
+            throw new RuntimeException("不能访问或提交别人的考试记录");
         }
     }
 
     private void ensurePaperOpenForAnswering(Paper paper) {
         LocalDateTime now = LocalDateTime.now();
         if (paper.getOpenStartTime() != null && now.isBefore(paper.getOpenStartTime())) {
-            throw new RuntimeException("鑰冭瘯灏氭湭鍒板紑鏀炬椂闂达紝涓嶈兘浣滅瓟");
+            throw new RuntimeException("考试未开放");
         }
         if (paper.getOpenEndTime() != null && !now.isBefore(paper.getOpenEndTime())) {
-            throw new RuntimeException("鑰冭瘯宸叉埅姝紝涓嶈兘浣滅瓟");
+            throw new RuntimeException("考试已截止");
         }
     }
 
@@ -468,7 +496,7 @@ public class StudentServiceImpl implements StudentService {
         ExamRecordDTO dto = new ExamRecordDTO();
         dto.setRecordId(record.getId());
         dto.setPaperId(record.getPaperId());
-        dto.setPaperTitle(paper == null ? "鏈煡璇曞嵎" : paper.getTitle());
+        dto.setPaperTitle(paper == null ? "未知试卷" : paper.getTitle());
         dto.setStartTime(record.getStartTime());
         dto.setSubmitTime(record.getSubmitTime());
         dto.setTotalScore(record.getTotalScore());
@@ -498,27 +526,12 @@ public class StudentServiceImpl implements StudentService {
         return dto;
     }
 
-    private boolean isAnswerAvailable(Paper paper, ExamRecord record) {
-        if (Boolean.TRUE.equals(paper.getReleaseAnswerFlag())) {
-            if (paper.getAnswerReleaseTime() != null) {
-                return !LocalDateTime.now().isBefore(paper.getAnswerReleaseTime());
-            }
-            return true;
-        }
-        return isAnswerReviewTimeReached(record, paper);
-    }
-
-    private boolean isAnswerReviewTimeReached(ExamRecord record, Paper paper) {
-        if (paper.getOpenEndTime() != null) {
-            return !LocalDateTime.now().isBefore(paper.getOpenEndTime());
-        }
-        if (record.getSubmitTime() != null) {
-            return true;
-        }
-        if (record.getStartTime() == null || paper.getDuration() == null) {
+    private boolean isAnswerAvailable(Paper paper) {
+        if (!Boolean.TRUE.equals(paper.getReleaseAnswerFlag())) {
             return false;
         }
-        return !LocalDateTime.now().isBefore(record.getStartTime().plusMinutes(paper.getDuration()));
+        return paper.getAnswerReleaseTime() == null
+                || !LocalDateTime.now().isBefore(paper.getAnswerReleaseTime());
     }
 
     private Map<Integer, String> buildReferenceAnswerMap(Map<Integer, Question> questionMap) {
@@ -547,5 +560,3 @@ public class StudentServiceImpl implements StudentService {
 
     private record GradeResult(Boolean isCorrect, Double scoreGot) {}
 }
-
-

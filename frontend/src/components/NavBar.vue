@@ -31,10 +31,14 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { authState, clearAuth, syncAuthFromStorage } from '../utils/auth'
 
 const router = useRouter()
 
-const role = computed(() => localStorage.getItem('role'))
+const role = computed(() => {
+  syncAuthFromStorage()
+  return authState.role
+})
 
 const roleLabel = computed(() => {
   const labels = { student: '学生', teacher: '教师', admin: '管理员' }
@@ -42,8 +46,7 @@ const roleLabel = computed(() => {
 })
 
 function handleLogout() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('role')
+  clearAuth()
   router.push('/login')
 }
 </script>

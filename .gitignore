@@ -25,3 +25,7 @@ backend/src/main/resources/application-local.yml
 backend/src/main/resources/application-dev.yml
 .env
 *.env
+
+# Local Maven distribution
+backend/apache-maven-*/
+apache-maven-*/

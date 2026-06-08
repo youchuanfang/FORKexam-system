@@ -74,6 +74,11 @@ public class TeacherController {
         return Result.success();
     }
 
+    @GetMapping("/papers/{paperId}/questions")
+    public Result<List<PaperQuestionDTO>> getPaperQuestions(@PathVariable Integer paperId) {
+        return Result.success(teacherService.getPaperQuestions(paperId));
+    }
+
     // ==================== Exam Records ====================
 
     @GetMapping("/exam-records")

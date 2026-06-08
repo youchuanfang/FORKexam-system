@@ -125,7 +125,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getPaper, createPaper, updatePaper, assignQuestions, getQuestions } from '../../api/teacher'
+import { getPaper, createPaper, updatePaper, assignQuestions, getQuestions, getPaperQuestions } from '../../api/teacher'
 
 const route = useRoute()
 const router = useRouter()
@@ -223,13 +223,20 @@ async function loadPool() {
 watch(pickerType, () => { loadPool() })
 
 async function loadExistingQuestions(pid) {
+  if (!pid) return
   try {
-    const res = await getPaper(pid)
+    const res = await getPaperQuestions(pid)
     if (res.code === 200 && res.data) {
-      // We need to fetch full question info. For simplicity, just show existing data.
+      assignedQuestions.value = (res.data || []).map(item => ({
+        questionId: item.questionId,
+        score: item.score ?? 0,
+        question: item.question || null
+      }))
+    } else {
+      qError.value = res.message || '加载已选题目失败'
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    qError.value = err.response?.data?.message || err.message || '加载已选题目失败'
   }
 }
 
@@ -323,6 +330,9 @@ async function saveQuestions() {
 
 onMounted(async () => {
   await loadPaper()
+  if (paperId.value) {
+    await loadExistingQuestions(paperId.value)
+  }
   loadPool()
 })
 </script>

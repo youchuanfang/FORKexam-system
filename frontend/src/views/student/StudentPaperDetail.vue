@@ -14,7 +14,7 @@
           <div>
             <div class="title-row">
               <h1>{{ paper.title || '未命名试卷' }}</h1>
-              <span :class="['status-pill', paper.status]">{{ paper.statusText || '已开放' }}</span>
+              <span :class="['status-pill', paper.status]">{{ paper.statusText || '考试开放中' }}</span>
             </div>
             <p>考试时长：{{ paper.duration || 0 }} 分钟</p>
             <p>开放时间：{{ formatOpenRange(paper) }}</p>
@@ -27,7 +27,7 @@
           </button>
         </div>
 
-        <p class="state-text">点击开始考试后才会进入答题页并加载题目。</p>
+        <p class="state-text">{{ paper.inProgressRecordId ? '已有未提交记录，点击继续作答会恢复该记录。' : '点击开始考试后进入答题页并加载题目。' }}</p>
       </template>
     </section>
   </div>
@@ -55,22 +55,23 @@ function normalizePaper(rawPaper) {
   item.attemptCount = attemptCount
   item.remainingAttempts = remainingAttempts
   if (!item.status) {
-    item.status = remainingAttempts > 0 ? 'OPEN' : 'NO_ATTEMPTS'
+    item.status = item.inProgressRecordId || remainingAttempts > 0 ? 'OPEN' : 'NO_ATTEMPTS'
   }
   if (!item.statusText) {
-    item.statusText = item.status === 'NO_ATTEMPTS' ? '作答次数已用完' : '已开放'
+    item.statusText = item.inProgressRecordId ? '可继续作答' : (item.status === 'NO_ATTEMPTS' ? '作答次数已用完' : '考试开放中')
   }
   return item
 }
 
 function canStart(item) {
-  return item.status === 'OPEN' && (item.remainingAttempts ?? 0) > 0
+  return item.status === 'OPEN' && (item.inProgressRecordId || (item.remainingAttempts ?? 0) > 0)
 }
 
 function actionText(item) {
-  if (starting.value) return '正在开始...'
+  if (starting.value) return item.inProgressRecordId ? '正在恢复...' : '正在开始...'
   if (item.status === 'NOT_OPEN') return '未开放'
-  if (item.status === 'CLOSED') return '已关闭，不可作答'
+  if (item.status === 'CLOSED') return '已关闭，不能作答'
+  if (item.inProgressRecordId) return '继续作答'
   if ((item.remainingAttempts ?? 0) <= 0) return '作答次数已用完'
   return (item.attemptCount || 0) > 0 ? '再次作答' : '开始考试'
 }
@@ -133,121 +134,25 @@ onMounted(loadPaper)
 </script>
 
 <style scoped>
-.student-page {
-  min-height: 100vh;
-  background: #f5f7fb;
-  padding: 32px;
-}
-
-.page-header,
-.panel {
-  max-width: 980px;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.panel {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 24px;
-}
-
-.paper-summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-  margin-bottom: 22px;
-}
-
-.title-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-h1,
-p {
-  margin: 0;
-}
-
-h1 {
-  color: #111827;
-  font-size: 26px;
-}
-
-.paper-summary p,
-.state-text {
-  color: #6b7280;
-  line-height: 1.8;
-}
-
-.status-pill {
-  background: #eef2ff;
-  border-radius: 999px;
-  color: #3730a3;
-  font-size: 12px;
-  padding: 4px 9px;
-}
-
-.status-pill.NOT_OPEN {
-  background: #fff7ed;
-  color: #c2410c;
-}
-
-.status-pill.CLOSED,
-.status-pill.NO_ATTEMPTS {
-  background: #f3f4f6;
-  color: #4b5563;
-}
-
-.primary-btn,
-.secondary-btn {
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.primary-btn {
-  background: #2563eb;
-  border: 0;
-  color: #fff;
-  padding: 10px 16px;
-}
-
-.primary-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
-.secondary-btn {
-  background: #fff;
-  border: 1px solid #d1d5db;
-  color: #374151;
-  padding: 9px 14px;
-}
-
-.error-text {
-  color: #dc2626;
-}
-
+.student-page { min-height: 100vh; background: #f5f7fb; padding: 32px; }
+.page-header, .panel { max-width: 980px; margin: 0 auto; }
+.page-header { display: flex; gap: 10px; margin-bottom: 18px; }
+.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
+.paper-summary { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 22px; }
+.title-row { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+h1, p { margin: 0; }
+h1 { color: #111827; font-size: 26px; }
+.paper-summary p, .state-text { color: #6b7280; line-height: 1.8; }
+.status-pill { background: #eef2ff; border-radius: 999px; color: #3730a3; font-size: 12px; padding: 4px 9px; }
+.status-pill.NOT_OPEN { background: #fff7ed; color: #c2410c; }
+.status-pill.CLOSED, .status-pill.NO_ATTEMPTS { background: #f3f4f6; color: #4b5563; }
+.primary-btn, .secondary-btn { border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; white-space: nowrap; }
+.primary-btn { background: #2563eb; border: 0; color: #fff; padding: 10px 16px; }
+.primary-btn:disabled { cursor: not-allowed; opacity: 0.65; }
+.secondary-btn { background: #fff; border: 1px solid #d1d5db; color: #374151; padding: 9px 14px; }
+.error-text { color: #dc2626; }
 @media (max-width: 720px) {
-  .student-page {
-    padding: 20px;
-  }
-
-  .paper-summary {
-    flex-direction: column;
-  }
+  .student-page { padding: 20px; }
+  .paper-summary { flex-direction: column; }
 }
 </style>

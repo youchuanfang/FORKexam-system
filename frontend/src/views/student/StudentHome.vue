@@ -39,7 +39,7 @@
           <div class="paper-main">
             <div class="paper-title-row">
               <h3>{{ paper.title || '未命名试卷' }}</h3>
-              <span :class="['status-pill', paper.status]">{{ paper.statusText || '已开放' }}</span>
+              <span :class="['status-pill', paper.status]">{{ paper.statusText || '考试开放中' }}</span>
             </div>
             <p>考试时长：{{ paper.duration || 0 }} 分钟</p>
             <p>开放时间：{{ formatOpenRange(paper) }}</p>
@@ -63,6 +63,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getPapers, startExam } from '../../api/student'
+import { clearAuth } from '../../utils/auth'
 
 const router = useRouter()
 const papers = ref([])
@@ -73,7 +74,7 @@ const startingId = ref(null)
 
 const filters = [
   { key: 'NOT_OPEN', label: '未开放' },
-  { key: 'OPEN', label: '已开放' },
+  { key: 'OPEN', label: '可作答' },
   { key: 'CLOSED', label: '已关闭' }
 ]
 
@@ -89,10 +90,10 @@ function normalizePaper(rawPaper) {
   paper.attemptCount = attemptCount
   paper.remainingAttempts = remainingAttempts
   if (!paper.status) {
-    paper.status = remainingAttempts > 0 ? 'OPEN' : 'NO_ATTEMPTS'
+    paper.status = paper.inProgressRecordId || remainingAttempts > 0 ? 'OPEN' : 'NO_ATTEMPTS'
   }
   if (!paper.statusText) {
-    paper.statusText = paper.status === 'NO_ATTEMPTS' ? '作答次数已用完' : '已开放'
+    paper.statusText = paper.inProgressRecordId ? '可继续作答' : (paper.status === 'NO_ATTEMPTS' ? '作答次数已用完' : '考试开放中')
   }
   return paper
 }
@@ -108,13 +109,14 @@ function countByFilter(key) {
 }
 
 function canStart(paper) {
-  return paper.status === 'OPEN' && (paper.remainingAttempts ?? 0) > 0
+  return paper.status === 'OPEN' && (paper.inProgressRecordId || (paper.remainingAttempts ?? 0) > 0)
 }
 
 function actionText(paper) {
-  if (startingId.value === paper.paperId) return '正在开始...'
+  if (startingId.value === paper.paperId) return paper.inProgressRecordId ? '正在恢复...' : '正在开始...'
   if (paper.status === 'NOT_OPEN') return '未开放'
-  if (paper.status === 'CLOSED') return '已关闭，不可作答'
+  if (paper.status === 'CLOSED') return '已关闭，不能作答'
+  if (paper.inProgressRecordId) return '继续作答'
   if ((paper.remainingAttempts ?? 0) <= 0) return '作答次数已用完'
   return (paper.attemptCount || 0) > 0 ? '再次作答' : '开始考试'
 }
@@ -174,8 +176,7 @@ async function handleStartExam(paper) {
 }
 
 function logout() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('role')
+  clearAuth()
   router.push('/login')
 }
 
@@ -183,202 +184,37 @@ onMounted(loadPapers)
 </script>
 
 <style scoped>
-.student-page {
-  min-height: 100vh;
-  background: #f5f7fb;
-  padding: 32px;
-}
-
-.page-header,
-.panel {
-  max-width: 1080px;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-
-h1,
-h2,
-h3,
-p {
-  margin: 0;
-}
-
-h1 {
-  color: #1f2937;
-  font-size: 28px;
-  margin-bottom: 8px;
-}
-
-.page-header p,
-.paper-card p,
-.state-text {
-  color: #6b7280;
-}
-
-.header-actions,
-.paper-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.paper-actions {
-  align-items: flex-end;
-  flex-direction: column;
-}
-
-.panel {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 24px;
-}
-
-.panel-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 18px;
-}
-
-.filter-tabs {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-bottom: 18px;
-}
-
-.filter-tab {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  color: #374151;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  padding: 14px;
-}
-
-.filter-tab.active {
-  background: #eff6ff;
-  border-color: #2563eb;
-  color: #1d4ed8;
-}
-
-.paper-list {
-  display: grid;
-  gap: 12px;
-}
-
-.paper-card {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 18px;
-}
-
-.paper-main {
-  display: grid;
-  gap: 6px;
-}
-
-.paper-title-row {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.paper-card h3 {
-  color: #111827;
-  font-size: 18px;
-}
-
-.status-pill {
-  background: #eef2ff;
-  border-radius: 999px;
-  color: #3730a3;
-  font-size: 12px;
-  padding: 4px 9px;
-}
-
-.status-pill.NOT_OPEN {
-  background: #fff7ed;
-  color: #c2410c;
-}
-
-.status-pill.CLOSED,
-.status-pill.NO_ATTEMPTS {
-  background: #f3f4f6;
-  color: #4b5563;
-}
-
-.primary-btn,
-.secondary-btn,
-.text-btn {
-  border: 0;
-  cursor: pointer;
-  text-decoration: none;
-  font-size: 14px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
-.primary-btn {
-  background: #2563eb;
-  color: #fff;
-  padding: 10px 16px;
-}
-
-.primary-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
-.secondary-btn {
-  background: #fff;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  padding: 9px 14px;
-}
-
-.text-btn {
-  background: transparent;
-  color: #2563eb;
-  padding: 6px 0;
-}
-
-.error-text {
-  color: #dc2626;
-}
-
+.student-page { min-height: 100vh; background: #f5f7fb; padding: 32px; }
+.page-header, .panel { max-width: 1080px; margin: 0 auto; }
+.page-header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 24px; }
+h1, h2, h3, p { margin: 0; }
+h1 { color: #1f2937; font-size: 28px; margin-bottom: 8px; }
+.page-header p, .paper-card p, .state-text { color: #6b7280; }
+.header-actions, .paper-actions { display: flex; gap: 10px; }
+.paper-actions { align-items: flex-end; flex-direction: column; }
+.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
+.panel-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.filter-tabs { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 18px; }
+.filter-tab { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; color: #374151; cursor: pointer; display: flex; justify-content: space-between; padding: 14px; }
+.filter-tab.active { background: #eff6ff; border-color: #2563eb; color: #1d4ed8; }
+.paper-list { display: grid; gap: 12px; }
+.paper-card { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; }
+.paper-main { display: grid; gap: 6px; }
+.paper-title-row { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }
+.paper-card h3 { color: #111827; font-size: 18px; }
+.status-pill { background: #eef2ff; border-radius: 999px; color: #3730a3; font-size: 12px; padding: 4px 9px; }
+.status-pill.NOT_OPEN { background: #fff7ed; color: #c2410c; }
+.status-pill.CLOSED, .status-pill.NO_ATTEMPTS { background: #f3f4f6; color: #4b5563; }
+.primary-btn, .secondary-btn, .text-btn { border: 0; cursor: pointer; text-decoration: none; font-size: 14px; border-radius: 6px; white-space: nowrap; }
+.primary-btn { background: #2563eb; color: #fff; padding: 10px 16px; }
+.primary-btn:disabled { cursor: not-allowed; opacity: 0.65; }
+.secondary-btn { background: #fff; color: #374151; border: 1px solid #d1d5db; padding: 9px 14px; }
+.text-btn { background: transparent; color: #2563eb; padding: 6px 0; }
+.error-text { color: #dc2626; }
 @media (max-width: 720px) {
-  .student-page {
-    padding: 20px;
-  }
-
-  .page-header,
-  .paper-card,
-  .paper-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-tabs {
-    grid-template-columns: 1fr;
-  }
-
-  .header-actions {
-    flex-wrap: wrap;
-  }
+  .student-page { padding: 20px; }
+  .page-header, .paper-card, .paper-actions { flex-direction: column; align-items: stretch; }
+  .filter-tabs { grid-template-columns: 1fr; }
+  .header-actions { flex-wrap: wrap; }
 }
 </style>

@@ -148,12 +148,13 @@ public class TeacherServiceImpl implements TeacherService {
         paper.setTitle(dto.getTitle());
         paper.setDuration(dto.getDuration());
         paper.setCreatedBy(teacherId);
-        paper.setTeacherOpenAnswer(false);
         paper.setOpenStartTime(dto.getOpenStartTime());
         paper.setOpenEndTime(dto.getOpenEndTime());
         paper.setMaxAttempts(dto.getMaxAttempts() != null ? dto.getMaxAttempts() : 1);
-        paper.setReleaseAnswerFlag(dto.getReleaseAnswerFlag() != null ? dto.getReleaseAnswerFlag() : false);
-        paper.setAnswerReleaseTime(dto.getAnswerReleaseTime());
+        boolean releaseAnswerFlag = Boolean.TRUE.equals(dto.getReleaseAnswerFlag());
+        paper.setReleaseAnswerFlag(releaseAnswerFlag);
+        paper.setTeacherOpenAnswer(releaseAnswerFlag);
+        paper.setAnswerReleaseTime(releaseAnswerFlag ? dto.getAnswerReleaseTime() : null);
         paper = paperRepository.save(paper);
         return toPaperListDTO(paper, Map.of(), Map.of());
     }
@@ -167,11 +168,14 @@ public class TeacherServiceImpl implements TeacherService {
         }
         if (dto.getTitle() != null) paper.setTitle(dto.getTitle());
         if (dto.getDuration() != null) paper.setDuration(dto.getDuration());
-        if (dto.getOpenStartTime() != null) paper.setOpenStartTime(dto.getOpenStartTime());
-        if (dto.getOpenEndTime() != null) paper.setOpenEndTime(dto.getOpenEndTime());
+        paper.setOpenStartTime(dto.getOpenStartTime());
+        paper.setOpenEndTime(dto.getOpenEndTime());
         if (dto.getMaxAttempts() != null) paper.setMaxAttempts(dto.getMaxAttempts());
-        if (dto.getReleaseAnswerFlag() != null) paper.setReleaseAnswerFlag(dto.getReleaseAnswerFlag());
-        if (dto.getAnswerReleaseTime() != null) paper.setAnswerReleaseTime(dto.getAnswerReleaseTime());
+        if (dto.getReleaseAnswerFlag() != null) {
+            paper.setReleaseAnswerFlag(dto.getReleaseAnswerFlag());
+            paper.setTeacherOpenAnswer(dto.getReleaseAnswerFlag());
+        }
+        paper.setAnswerReleaseTime(Boolean.TRUE.equals(paper.getReleaseAnswerFlag()) ? dto.getAnswerReleaseTime() : null);
         paper = paperRepository.save(paper);
         List<PaperQuestion> pqs = paperQuestionRepository.findByPaperId(paperId);
         List<ExamRecord> records = examRecordRepository.findByPaperId(paperId);
@@ -188,8 +192,38 @@ public class TeacherServiceImpl implements TeacherService {
         if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
             throw new RuntimeException("不能删除其他教师的试卷");
         }
+        if (!examRecordRepository.findByPaperId(paperId).isEmpty()) {
+            throw new RuntimeException("该试卷已有考试记录，不能删除，可后续改为归档/禁用");
+        }
         paperQuestionRepository.deleteByPaperId(paperId);
         paperRepository.deleteById(paperId);
+    }
+
+    @Override
+    public List<PaperQuestionDTO> getPaperQuestions(Integer paperId) {
+        Integer teacherId = ensureTeacher();
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能查看其他教师的试卷");
+        }
+        List<PaperQuestion> paperQuestions = paperQuestionRepository.findByPaperId(paperId);
+        Map<Integer, Question> questionMap = questionRepository.findAllById(
+                paperQuestions.stream()
+                        .map(PaperQuestion::getQuestionId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList())
+        ).stream().collect(Collectors.toMap(Question::getId, q -> q));
+
+        return paperQuestions.stream().map(pq -> {
+            PaperQuestionDTO dto = new PaperQuestionDTO();
+            dto.setQuestionId(pq.getQuestionId());
+            dto.setScore(pq.getScore());
+            Question question = questionMap.get(pq.getQuestionId());
+            if (question != null) {
+                dto.setQuestion(toQuestionDTO(question));
+            }
+            return dto;
+        }).collect(Collectors.toList());
     }
 
     @Override

@@ -126,26 +126,18 @@ function parseOptions(options) {
 
 function splitOptionText(options) {
   const text = String(options).trim()
-  if (!text) {
-    return []
-  }
-
+  if (!text) return []
   const lines = text.split(/\r?\n/).map(item => item.trim()).filter(Boolean)
-  if (lines.length > 1) {
-    return lines
-  }
-
-  // Supports compact teacher-entered text such as "A. foo B. bar C. baz D. qux".
-  const compactOptions = text.match(/[A-Za-z][\.\、．)]\s*.*?(?=\s+[A-Za-z][\.\、．)]\s*|$)/g)
+  if (lines.length > 1) return lines
+  const compactOptions = text.match(/[A-Za-z][.、)]\s*.*?(?=\s+[A-Za-z][.、)]\s*|$)/g)
   if (compactOptions && compactOptions.length > 1) {
     return compactOptions.map(item => item.trim())
   }
-
-  return text.split(/[,，；;]/).map(item => item.trim()).filter(Boolean)
+  return text.split(/[,，;；]/).map(item => item.trim()).filter(Boolean)
 }
 
 function optionValue(option) {
-  const match = String(option).trim().match(/^([A-Za-z])[\.\、．)]/)
+  const match = String(option).trim().match(/^([A-Za-z])[.、)]/)
   return match ? match[1].toUpperCase() : option
 }
 
@@ -154,12 +146,12 @@ function selectedMulti(questionId) {
   return value ? value.split(',').filter(Boolean) : []
 }
 
-function toggleMulti(questionId, optionValue) {
+function toggleMulti(questionId, optionValueText) {
   const values = new Set(selectedMulti(questionId))
-  if (values.has(optionValue)) {
-    values.delete(optionValue)
+  if (values.has(optionValueText)) {
+    values.delete(optionValueText)
   } else {
-    values.add(optionValue)
+    values.add(optionValueText)
   }
   answers[questionId] = Array.from(values).join(',')
 }
@@ -299,160 +291,32 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.student-page {
-  min-height: 100vh;
-  background: #f5f7fb;
-  padding: 32px;
-}
-
-.panel {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin: 0 auto;
-  max-width: 980px;
-  padding: 24px;
-}
-
-.exam-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 22px;
-}
-
-.exam-tools {
-  align-items: flex-end;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-h1,
-p {
-  margin: 0;
-}
-
-h1 {
-  color: #111827;
-  font-size: 26px;
-  margin-bottom: 8px;
-}
-
-.exam-header p,
-.state-text {
-  color: #6b7280;
-}
-
-.timer {
-  color: #1f2937;
-  font-size: 18px;
-}
-
-.timer.danger {
-  color: #dc2626;
-}
-
-.question-list {
-  display: grid;
-  gap: 14px;
-}
-
-.question-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.question-head {
-  display: flex;
-  justify-content: space-between;
-  color: #374151;
-  margin-bottom: 10px;
-}
-
-.question-content {
-  color: #111827;
-  line-height: 1.6;
-  margin-bottom: 12px;
-}
-
-.answer-area {
-  display: grid;
-  gap: 8px;
-}
-
-.choice-line {
-  align-items: center;
-  color: #374151;
-  display: flex;
-  gap: 8px;
-  line-height: 1.5;
-}
-
-.text-input,
-.text-area {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  box-sizing: border-box;
-  font-size: 14px;
-  padding: 10px 12px;
-  width: 100%;
-}
-
-.text-area {
-  resize: vertical;
-}
-
-.submit-row {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.primary-btn,
-.secondary-btn {
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.primary-btn {
-  background: #2563eb;
-  border: 0;
-  color: #fff;
-  padding: 10px 18px;
-}
-
-.primary-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.secondary-btn {
-  background: #fff;
-  border: 1px solid #d1d5db;
-  color: #374151;
-  padding: 9px 14px;
-}
-
-.error-text {
-  color: #dc2626;
-}
-
+.student-page { min-height: 100vh; background: #f5f7fb; padding: 32px; }
+.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; margin: 0 auto; max-width: 980px; padding: 24px; }
+.exam-header { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+.exam-tools { align-items: flex-end; display: flex; flex-direction: column; gap: 10px; }
+h1, p { margin: 0; }
+h1 { color: #111827; font-size: 26px; margin-bottom: 8px; }
+.exam-header p, .state-text { color: #6b7280; }
+.timer { color: #1f2937; font-size: 18px; }
+.timer.danger { color: #dc2626; }
+.question-list { display: grid; gap: 14px; }
+.question-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+.question-head { display: flex; justify-content: space-between; color: #374151; margin-bottom: 10px; }
+.question-content { color: #111827; line-height: 1.6; margin-bottom: 12px; }
+.answer-area { display: grid; gap: 8px; }
+.choice-line { align-items: center; color: #374151; display: flex; gap: 8px; line-height: 1.5; }
+.text-input, .text-area { border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 14px; padding: 10px 12px; width: 100%; }
+.text-area { resize: vertical; }
+.submit-row { display: flex; justify-content: flex-end; }
+.primary-btn, .secondary-btn { border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; white-space: nowrap; }
+.primary-btn { background: #2563eb; border: 0; color: #fff; padding: 10px 18px; }
+.primary-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+.secondary-btn { background: #fff; border: 1px solid #d1d5db; color: #374151; padding: 9px 14px; }
+.error-text { color: #dc2626; }
 @media (max-width: 720px) {
-  .student-page {
-    padding: 20px;
-  }
-
-  .exam-header,
-  .question-head {
-    flex-direction: column;
-  }
-
-  .exam-tools {
-    align-items: stretch;
-  }
+  .student-page { padding: 20px; }
+  .exam-header, .question-head { flex-direction: column; }
+  .exam-tools { align-items: stretch; }
 }
 </style>

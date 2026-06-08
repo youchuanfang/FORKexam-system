@@ -40,7 +40,13 @@
           <div class="paper-actions">
             <router-link class="secondary-btn" :to="`/teacher/papers/${paper.id}/edit`">编辑组卷</router-link>
             <router-link class="secondary-btn" :to="`/teacher/papers/${paper.id}/records`">查看记录</router-link>
-            <button class="text-btn danger" type="button" @click="handleDelete(paper)">删除</button>
+            <button
+              class="text-btn danger"
+              type="button"
+              :disabled="(paper.recordCount ?? 0) > 0"
+              :title="(paper.recordCount ?? 0) > 0 ? '该试卷已有考试记录，不能删除' : ''"
+              @click="handleDelete(paper)"
+            >删除</button>
           </div>
         </article>
       </div>
@@ -78,6 +84,10 @@ async function loadPapers() {
 }
 
 async function handleDelete(paper) {
+  if ((paper.recordCount ?? 0) > 0) {
+    error.value = '该试卷已有考试记录，不能删除，可后续改为归档/禁用'
+    return
+  }
   if (!confirm(`确定删除试卷 "${paper.title}" 吗？此操作不可撤销。`)) return
   try {
     const res = await deletePaper(paper.id)
@@ -179,6 +189,11 @@ h1 { color: #1f2937; font-size: 28px; margin-bottom: 8px; }
 }
 
 .text-btn.danger { color: #dc2626; }
+
+.text-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 
 .error-text { color: #dc2626; }
 
