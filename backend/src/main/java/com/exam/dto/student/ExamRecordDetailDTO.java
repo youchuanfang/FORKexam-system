@@ -16,6 +16,7 @@ public class ExamRecordDetailDTO {
     private Double totalScore;
     // Reserved for teacher-side settings: papers.teacher_open_answer.
     private Boolean teacherOpenAnswer;
+    private Boolean leaderboardPublic;
     // Reserved for teacher-side subjective reference answers. Key is questionId.
     private Map<Integer, String> referenceAnswerMap;
     private List<QuestionDTO> questions;
@@ -43,6 +44,8 @@ public class ExamRecordDetailDTO {
     public void setTotalScore(Double totalScore) { this.totalScore = totalScore; }
     public Boolean getTeacherOpenAnswer() { return teacherOpenAnswer; }
     public void setTeacherOpenAnswer(Boolean teacherOpenAnswer) { this.teacherOpenAnswer = teacherOpenAnswer; }
+    public Boolean getLeaderboardPublic() { return leaderboardPublic; }
+    public void setLeaderboardPublic(Boolean leaderboardPublic) { this.leaderboardPublic = leaderboardPublic; }
     public Map<Integer, String> getReferenceAnswerMap() { return referenceAnswerMap; }
     public void setReferenceAnswerMap(Map<Integer, String> referenceAnswerMap) { this.referenceAnswerMap = referenceAnswerMap; }
     public List<QuestionDTO> getQuestions() { return questions; }

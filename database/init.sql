@@ -78,6 +78,12 @@ BEGIN
         teacher_open_answer BIT NOT NULL DEFAULT 0,
         open_start_time DATETIME2 NULL,
         open_end_time DATETIME2 NULL,
+        max_attempts INT NOT NULL DEFAULT 1,
+        release_answer_flag BIT NOT NULL DEFAULT 0,
+        answer_release_time DATETIME2 NULL,
+        published BIT NOT NULL DEFAULT 0,
+        published_at DATETIME2 NULL,
+        leaderboard_public BIT NOT NULL DEFAULT 0,
         CONSTRAINT FK_papers_created_by FOREIGN KEY (created_by) REFERENCES users(id)
     );
 END
@@ -116,6 +122,24 @@ GO
 IF COL_LENGTH(''papers'', ''answer_release_time'') IS NULL
 BEGIN
     ALTER TABLE papers ADD answer_release_time DATETIME2 NULL;
+END
+GO
+
+IF COL_LENGTH(''papers'', ''published'') IS NULL
+BEGIN
+    ALTER TABLE papers ADD published BIT NOT NULL DEFAULT 0;
+END
+GO
+
+IF COL_LENGTH(''papers'', ''published_at'') IS NULL
+BEGIN
+    ALTER TABLE papers ADD published_at DATETIME2 NULL;
+END
+GO
+
+IF COL_LENGTH(''papers'', ''leaderboard_public'') IS NULL
+BEGIN
+    ALTER TABLE papers ADD leaderboard_public BIT NOT NULL DEFAULT 0;
 END
 GO
 
@@ -176,6 +200,66 @@ END
 GO
 
 CREATE NONCLUSTERED INDEX idx_answer_details_record ON answer_details(record_id);
+GO
+
+-- ========================================
+-- 7. 班级表
+-- ========================================
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''class_rooms'' AND xtype=''U'')
+BEGIN
+    CREATE TABLE class_rooms (
+        id INT IDENTITY PRIMARY KEY,
+        name NVARCHAR(100) NOT NULL,
+        teacher_id INT NOT NULL,
+        join_code NVARCHAR(32) NOT NULL,
+        created_at DATETIME2 NULL,
+        CONSTRAINT UQ_class_rooms_join_code UNIQUE(join_code),
+        CONSTRAINT FK_class_rooms_teacher FOREIGN KEY (teacher_id) REFERENCES users(id)
+    );
+END
+GO
+
+CREATE NONCLUSTERED INDEX idx_class_rooms_teacher ON class_rooms(teacher_id);
+GO
+
+-- ========================================
+-- 8. 班级成员表
+-- ========================================
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''class_members'' AND xtype=''U'')
+BEGIN
+    CREATE TABLE class_members (
+        id INT IDENTITY PRIMARY KEY,
+        class_id INT NOT NULL,
+        student_id INT NOT NULL,
+        joined_at DATETIME2 NULL,
+        CONSTRAINT UQ_class_members_class_student UNIQUE(class_id, student_id),
+        CONSTRAINT FK_class_members_class FOREIGN KEY (class_id) REFERENCES class_rooms(id),
+        CONSTRAINT FK_class_members_student FOREIGN KEY (student_id) REFERENCES users(id)
+    );
+END
+GO
+
+CREATE NONCLUSTERED INDEX idx_class_members_class ON class_members(class_id);
+CREATE NONCLUSTERED INDEX idx_class_members_student ON class_members(student_id);
+GO
+
+-- ========================================
+-- 9. 试卷发布范围表
+-- ========================================
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''paper_targets'' AND xtype=''U'')
+BEGIN
+    CREATE TABLE paper_targets (
+        id INT IDENTITY PRIMARY KEY,
+        paper_id INT NOT NULL,
+        target_type NVARCHAR(20) NOT NULL,
+        target_id INT NULL,
+        CONSTRAINT FK_paper_targets_paper FOREIGN KEY (paper_id) REFERENCES papers(id),
+        CONSTRAINT CK_paper_targets_type CHECK (target_type IN (''ALL'',''CLASS'',''STUDENT''))
+    );
+END
+GO
+
+CREATE NONCLUSTERED INDEX idx_paper_targets_paper ON paper_targets(paper_id);
 GO
 
 PRINT ''数据库初始化完成！所有表已创建。'';

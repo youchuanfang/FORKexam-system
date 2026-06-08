@@ -10,7 +10,7 @@ public interface UserService {
      * @param password 明文密码
      * @return 包含 token 和 role 的 Map
      */
-    Map<String, Object> login(String username, String password);
+    Map<String, Object> login(String username, String password, String role);
 
     /**
      * 用户注册

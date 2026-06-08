@@ -24,11 +24,13 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public Map<String, Object> login(String username, String password) {
+    public Map<String, Object> login(String username, String password, String role) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("用户名或密码错误"));
-        if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new RuntimeException("用户名或密码错误");
+                .orElseThrow(() -> new RuntimeException("账号不存在或密码错误"));
+        if (!passwordEncoder.matches(password, user.getPassword())
+                || role == null
+                || !role.equals(user.getRole())) {
+            throw new RuntimeException("账号不存在或密码错误");
         }
         String token = jwtUtil.generateToken(user.getId(), user.getRole());
         Map<String, Object> result = new HashMap<>();

@@ -1,6 +1,9 @@
 package com.exam.service.student;
 
 import com.exam.common.UserContext;
+import com.exam.dto.common.ClassRoomDTO;
+import com.exam.dto.common.LeaderboardItemDTO;
+import com.exam.dto.common.StudentDTO;
 import com.exam.dto.student.AnswerDetailDTO;
 import com.exam.dto.student.ExamRecordDTO;
 import com.exam.dto.student.ExamRecordDetailDTO;
@@ -13,15 +16,23 @@ import com.exam.dto.student.SubmitAnswerDTO;
 import com.exam.dto.student.SubmitExamRequest;
 import com.exam.dto.student.SubmitExamResponse;
 import com.exam.entity.AnswerDetail;
+import com.exam.entity.ClassMember;
+import com.exam.entity.ClassRoom;
 import com.exam.entity.ExamRecord;
 import com.exam.entity.Paper;
 import com.exam.entity.PaperQuestion;
+import com.exam.entity.PaperTarget;
 import com.exam.entity.Question;
+import com.exam.entity.User;
 import com.exam.repository.AnswerDetailRepository;
+import com.exam.repository.ClassMemberRepository;
+import com.exam.repository.ClassRoomRepository;
 import com.exam.repository.ExamRecordRepository;
 import com.exam.repository.PaperQuestionRepository;
 import com.exam.repository.PaperRepository;
+import com.exam.repository.PaperTargetRepository;
 import com.exam.repository.QuestionRepository;
+import com.exam.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,17 +61,29 @@ public class StudentServiceImpl implements StudentService {
     private final QuestionRepository questionRepository;
     private final ExamRecordRepository examRecordRepository;
     private final AnswerDetailRepository answerDetailRepository;
+    private final ClassRoomRepository classRoomRepository;
+    private final ClassMemberRepository classMemberRepository;
+    private final PaperTargetRepository paperTargetRepository;
+    private final UserRepository userRepository;
 
     public StudentServiceImpl(PaperRepository paperRepository,
                               PaperQuestionRepository paperQuestionRepository,
                               QuestionRepository questionRepository,
                               ExamRecordRepository examRecordRepository,
-                              AnswerDetailRepository answerDetailRepository) {
+                              AnswerDetailRepository answerDetailRepository,
+                              ClassRoomRepository classRoomRepository,
+                              ClassMemberRepository classMemberRepository,
+                              PaperTargetRepository paperTargetRepository,
+                              UserRepository userRepository) {
         this.paperRepository = paperRepository;
         this.paperQuestionRepository = paperQuestionRepository;
         this.questionRepository = questionRepository;
         this.examRecordRepository = examRecordRepository;
         this.answerDetailRepository = answerDetailRepository;
+        this.classRoomRepository = classRoomRepository;
+        this.classMemberRepository = classMemberRepository;
+        this.paperTargetRepository = paperTargetRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -68,6 +91,7 @@ public class StudentServiceImpl implements StudentService {
         Integer studentId = ensureStudent();
         List<ExamRecord> studentRecords = examRecordRepository.findByStudentId(studentId);
         return paperRepository.findAll().stream()
+                .filter(paper -> isPaperEligibleForStudent(paper, studentId))
                 .sorted(Comparator.comparing(Paper::getId, Comparator.nullsLast(Integer::compareTo)))
                 .map(paper -> buildPaperListDTO(paper, studentRecords))
                 .collect(Collectors.toList());
@@ -77,6 +101,7 @@ public class StudentServiceImpl implements StudentService {
     public PaperDetailDTO getPaperDetail(Integer paperId) {
         Integer studentId = ensureStudent();
         Paper paper = getPaperOrThrow(paperId);
+        ensurePaperEligibleForStudent(paper, studentId);
         List<ExamRecord> studentRecords = examRecordRepository.findByStudentId(studentId);
         return buildPaperBasicDetail(paper, studentRecords);
     }
@@ -90,6 +115,7 @@ public class StudentServiceImpl implements StudentService {
         }
 
         Paper paper = getPaperOrThrow(request.getPaperId());
+        ensurePaperEligibleForStudent(paper, studentId);
         List<ExamRecord> studentRecords = examRecordRepository.findByStudentId(studentId);
         ExamRecord inProgress = findInProgressRecord(studentRecords, paper.getId());
         ensurePaperOpenForAnswering(paper);
@@ -225,6 +251,7 @@ public class StudentServiceImpl implements StudentService {
         dto.setSubmitTime(record.getSubmitTime());
         dto.setTotalScore(record.getTotalScore());
         dto.setTeacherOpenAnswer(answerReleased);
+        dto.setLeaderboardPublic(Boolean.TRUE.equals(paper.getLeaderboardPublic()));
         dto.setReferenceAnswerMap(canReturnAnswers ? buildReferenceAnswerMap(questionMap) : new HashMap<>());
         if (record.getSubmitTime() == null) {
             dto.setQuestions(buildQuestions(record.getPaperId()));
@@ -234,6 +261,62 @@ public class StudentServiceImpl implements StudentService {
             dto.setAnswers(answers);
         }
         return dto;
+    }
+
+    @Override
+    public List<ClassRoomDTO> getMyClasses() {
+        Integer studentId = ensureStudent();
+        return classMemberRepository.findByStudentId(studentId).stream()
+                .map(member -> classRoomRepository.findById(member.getClassId()).orElse(null))
+                .filter(Objects::nonNull)
+                .map(classRoom -> {
+                    ClassRoomDTO dto = new ClassRoomDTO();
+                    dto.setId(classRoom.getId());
+                    dto.setName(classRoom.getName());
+                    dto.setTeacherId(classRoom.getTeacherId());
+                    dto.setJoinCode(classRoom.getJoinCode());
+                    dto.setCreatedAt(classRoom.getCreatedAt());
+                    dto.setMemberCount(classMemberRepository.findByClassId(classRoom.getId()).size());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public ClassRoomDTO joinClass(String joinCode) {
+        Integer studentId = ensureStudent();
+        if (joinCode == null || joinCode.isBlank()) {
+            throw new RuntimeException("邀请码不能为空");
+        }
+        ClassRoom classRoom = classRoomRepository.findByJoinCode(joinCode.trim())
+                .orElseThrow(() -> new RuntimeException("班级不存在"));
+        if (!classMemberRepository.existsByClassIdAndStudentId(classRoom.getId(), studentId)) {
+            ClassMember member = new ClassMember();
+            member.setClassId(classRoom.getId());
+            member.setStudentId(studentId);
+            member.setJoinedAt(LocalDateTime.now());
+            classMemberRepository.save(member);
+        }
+        ClassRoomDTO dto = new ClassRoomDTO();
+        dto.setId(classRoom.getId());
+        dto.setName(classRoom.getName());
+        dto.setTeacherId(classRoom.getTeacherId());
+        dto.setJoinCode(classRoom.getJoinCode());
+        dto.setCreatedAt(classRoom.getCreatedAt());
+        dto.setMemberCount(classMemberRepository.findByClassId(classRoom.getId()).size());
+        return dto;
+    }
+
+    @Override
+    public List<LeaderboardItemDTO> getLeaderboard(Integer paperId) {
+        Integer studentId = ensureStudent();
+        Paper paper = getPaperOrThrow(paperId);
+        ensurePaperEligibleForStudent(paper, studentId);
+        if (!Boolean.TRUE.equals(paper.getLeaderboardPublic())) {
+            throw new RuntimeException("排行榜未公开");
+        }
+        return toLeaderboard(bestSubmittedRecordsByStudent(paperId).values());
     }
 
     private PaperDetailDTO buildPaperBasicDetail(Paper paper, List<ExamRecord> studentRecords) {
@@ -252,6 +335,7 @@ public class StudentServiceImpl implements StudentService {
         dto.setStatusText(summary.getStatusText());
         dto.setTeacherOpenAnswer(Boolean.TRUE.equals(paper.getReleaseAnswerFlag()));
         dto.setInProgressRecordId(summary.getInProgressRecordId());
+        dto.setLeaderboardPublic(Boolean.TRUE.equals(paper.getLeaderboardPublic()));
         dto.setQuestions(new ArrayList<>());
         return dto;
     }
@@ -317,6 +401,7 @@ public class StudentServiceImpl implements StudentService {
         dto.setRemainingAttempts(remainingAttempts);
         dto.setBestScore(bestScore);
         dto.setInProgressRecordId(inProgress == null ? null : inProgress.getId());
+        dto.setLeaderboardPublic(Boolean.TRUE.equals(paper.getLeaderboardPublic()));
         LocalDateTime now = LocalDateTime.now();
         if (paper.getOpenStartTime() != null && now.isBefore(paper.getOpenStartTime())) {
             dto.setStatus("NOT_OPEN");
@@ -532,6 +617,80 @@ public class StudentServiceImpl implements StudentService {
         }
         return paper.getAnswerReleaseTime() == null
                 || !LocalDateTime.now().isBefore(paper.getAnswerReleaseTime());
+    }
+
+    private boolean isPaperEligibleForStudent(Paper paper, Integer studentId) {
+        if (!Boolean.TRUE.equals(paper.getPublished())) {
+            return false;
+        }
+        List<PaperTarget> targets = paperTargetRepository.findByPaperId(paper.getId());
+        if (targets.isEmpty()) {
+            return false;
+        }
+        Set<Integer> classIds = classMemberRepository.findByStudentId(studentId).stream()
+                .map(ClassMember::getClassId)
+                .collect(Collectors.toSet());
+        for (PaperTarget target : targets) {
+            if (PaperTarget.TYPE_ALL.equals(target.getTargetType())) {
+                return true;
+            }
+            if (PaperTarget.TYPE_STUDENT.equals(target.getTargetType()) && Objects.equals(target.getTargetId(), studentId)) {
+                return true;
+            }
+            if (PaperTarget.TYPE_CLASS.equals(target.getTargetType()) && classIds.contains(target.getTargetId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void ensurePaperEligibleForStudent(Paper paper, Integer studentId) {
+        if (!isPaperEligibleForStudent(paper, studentId)) {
+            throw new RuntimeException("试卷未发布或无权限查看");
+        }
+    }
+
+    private Map<Integer, ExamRecord> bestSubmittedRecordsByStudent(Integer paperId) {
+        Map<Integer, ExamRecord> best = new HashMap<>();
+        for (ExamRecord record : examRecordRepository.findByPaperIdAndSubmitTimeIsNotNull(paperId)) {
+            ExamRecord current = best.get(record.getStudentId());
+            if (current == null || compareLeaderboardRecord(record, current) < 0) {
+                best.put(record.getStudentId(), record);
+            }
+        }
+        return best;
+    }
+
+    private int compareLeaderboardRecord(ExamRecord left, ExamRecord right) {
+        double leftScore = left.getTotalScore() == null ? 0.0 : left.getTotalScore();
+        double rightScore = right.getTotalScore() == null ? 0.0 : right.getTotalScore();
+        int scoreCompare = Double.compare(rightScore, leftScore);
+        if (scoreCompare != 0) {
+            return scoreCompare;
+        }
+        LocalDateTime leftTime = left.getSubmitTime() == null ? LocalDateTime.MAX : left.getSubmitTime();
+        LocalDateTime rightTime = right.getSubmitTime() == null ? LocalDateTime.MAX : right.getSubmitTime();
+        return leftTime.compareTo(rightTime);
+    }
+
+    private List<LeaderboardItemDTO> toLeaderboard(Collection<ExamRecord> records) {
+        List<ExamRecord> sorted = records.stream()
+                .sorted(this::compareLeaderboardRecord)
+                .collect(Collectors.toList());
+        Map<Integer, String> usernames = userRepository.findAllById(
+                sorted.stream().map(ExamRecord::getStudentId).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(User::getId, User::getUsername));
+        List<LeaderboardItemDTO> items = new ArrayList<>();
+        int rank = 1;
+        for (ExamRecord record : sorted) {
+            LeaderboardItemDTO item = new LeaderboardItemDTO();
+            item.setRank(rank++);
+            item.setUsername(usernames.getOrDefault(record.getStudentId(), "未知"));
+            item.setScore(record.getTotalScore());
+            item.setSubmitTime(record.getSubmitTime());
+            items.add(item);
+        }
+        return items;
     }
 
     private Map<Integer, String> buildReferenceAnswerMap(Map<Integer, Question> questionMap) {

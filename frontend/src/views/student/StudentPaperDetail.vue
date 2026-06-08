@@ -28,6 +28,20 @@
         </div>
 
         <p class="state-text">{{ paper.inProgressRecordId ? '已有未提交记录，点击继续作答会恢复该记录。' : '点击开始考试后进入答题页并加载题目。' }}</p>
+
+        <div v-if="paper.leaderboardPublic" class="leaderboard-panel">
+          <h3>排行榜</h3>
+          <p v-if="leaderboardLoading" class="state-text">加载排行榜中...</p>
+          <div v-else class="leaderboard-list">
+            <div v-for="item in leaderboard" :key="`${item.rank}-${item.username}`" class="leaderboard-row">
+              <span>#{{ item.rank }}</span>
+              <span>{{ item.username }}</span>
+              <strong>{{ item.score ?? 0 }} 分</strong>
+              <small>{{ formatTime(item.submitTime) }}</small>
+            </div>
+            <p v-if="leaderboard.length === 0" class="state-text">暂无排行榜数据。</p>
+          </div>
+        </div>
       </template>
     </section>
   </div>
@@ -36,7 +50,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getPaperDetail, startExam } from '../../api/student'
+import { getPaperDetail, startExam, getLeaderboard } from '../../api/student'
 
 const route = useRoute()
 const router = useRouter()
@@ -44,6 +58,8 @@ const paper = ref(null)
 const loading = ref(false)
 const starting = ref(false)
 const error = ref('')
+const leaderboard = ref([])
+const leaderboardLoading = ref(false)
 
 function normalizePaper(rawPaper) {
   const item = { ...rawPaper }
@@ -100,6 +116,9 @@ async function loadPaper() {
     const res = await getPaperDetail(route.params.paperId)
     if (res.code === 200) {
       paper.value = normalizePaper(res.data)
+      if (paper.value.leaderboardPublic) {
+        await loadLeaderboard()
+      }
     } else {
       error.value = res.message || '获取试卷详情失败'
     }
@@ -107,6 +126,16 @@ async function loadPaper() {
     error.value = err.response?.data?.message || err.message || '获取试卷详情失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadLeaderboard() {
+  leaderboardLoading.value = true
+  try {
+    const res = await getLeaderboard(route.params.paperId)
+    leaderboard.value = res.code === 200 ? (res.data || []) : []
+  } finally {
+    leaderboardLoading.value = false
   }
 }
 
@@ -151,8 +180,13 @@ h1 { color: #111827; font-size: 26px; }
 .primary-btn:disabled { cursor: not-allowed; opacity: 0.65; }
 .secondary-btn { background: #fff; border: 1px solid #d1d5db; color: #374151; padding: 9px 14px; }
 .error-text { color: #dc2626; }
+.leaderboard-panel { border-top: 1px solid #e5e7eb; margin-top: 18px; padding-top: 18px; }
+.leaderboard-panel h3 { color: #111827; margin: 0 0 10px; }
+.leaderboard-list { display: grid; gap: 6px; }
+.leaderboard-row { align-items: center; background: #f9fafb; border-radius: 6px; display: grid; gap: 10px; grid-template-columns: 54px 1fr 90px 170px; padding: 8px 10px; }
 @media (max-width: 720px) {
   .student-page { padding: 20px; }
   .paper-summary { flex-direction: column; }
+  .leaderboard-row { grid-template-columns: 44px 1fr; }
 }
 </style>

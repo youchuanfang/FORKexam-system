@@ -1,11 +1,17 @@
 package com.exam.controller.teacher;
 
 import com.exam.common.Result;
+import com.exam.dto.common.ClassRoomDTO;
+import com.exam.dto.common.LeaderboardItemDTO;
+import com.exam.dto.common.PaperTargetDTO;
+import com.exam.dto.common.StudentDTO;
 import com.exam.dto.teacher.*;
 import com.exam.service.teacher.TeacherService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/teacher")
@@ -68,6 +74,18 @@ public class TeacherController {
         return Result.success();
     }
 
+    @PostMapping("/papers/{paperId}/publish")
+    public Result<PaperListDTO> publishPaper(@PathVariable Integer paperId,
+                                             @RequestBody(required = false) List<PaperTargetDTO> targets) {
+        return Result.success(teacherService.publishPaper(paperId, targets));
+    }
+
+    @PutMapping("/papers/{paperId}/leaderboard-visibility")
+    public Result<PaperListDTO> updateLeaderboardVisibility(@PathVariable Integer paperId,
+                                                            @RequestBody Map<String, Boolean> body) {
+        return Result.success(teacherService.updateLeaderboardVisibility(paperId, body == null ? false : body.get("leaderboardPublic")));
+    }
+
     @PostMapping("/papers/{paperId}/questions")
     public Result<?> assignQuestions(@PathVariable Integer paperId, @RequestBody List<PaperQuestionDTO> questions) {
         teacherService.assignQuestions(paperId, questions);
@@ -77,6 +95,39 @@ public class TeacherController {
     @GetMapping("/papers/{paperId}/questions")
     public Result<List<PaperQuestionDTO>> getPaperQuestions(@PathVariable Integer paperId) {
         return Result.success(teacherService.getPaperQuestions(paperId));
+    }
+
+    // ==================== Class Management ====================
+
+    @GetMapping("/classes")
+    public Result<List<ClassRoomDTO>> getClasses() {
+        return Result.success(teacherService.getClasses());
+    }
+
+    @PostMapping("/classes")
+    public Result<ClassRoomDTO> createClass(@RequestBody Map<String, String> body) {
+        return Result.success(teacherService.createClass(body == null ? null : body.get("name")));
+    }
+
+    @GetMapping("/classes/{classId}")
+    public Result<ClassRoomDTO> getClassDetail(@PathVariable Integer classId) {
+        return Result.success(teacherService.getClassDetail(classId));
+    }
+
+    @PostMapping("/classes/{classId}/students")
+    public Result<ClassRoomDTO> addClassStudent(@PathVariable Integer classId, @RequestBody Map<String, Integer> body) {
+        return Result.success(teacherService.addClassStudent(classId, body == null ? null : body.get("studentId")));
+    }
+
+    @DeleteMapping("/classes/{classId}/students/{studentId}")
+    public Result<?> removeClassStudent(@PathVariable Integer classId, @PathVariable Integer studentId) {
+        teacherService.removeClassStudent(classId, studentId);
+        return Result.success();
+    }
+
+    @GetMapping("/students")
+    public Result<List<StudentDTO>> getStudents(@RequestParam(required = false) String keyword) {
+        return Result.success(teacherService.getStudents(keyword));
     }
 
     // ==================== Exam Records ====================
@@ -89,6 +140,22 @@ public class TeacherController {
     @GetMapping("/exam-records/{recordId}")
     public Result<ExamRecordDetailDTO> getExamRecordDetail(@PathVariable Integer recordId) {
         return Result.success(teacherService.getExamRecordDetail(recordId));
+    }
+
+    @GetMapping("/papers/{paperId}/statistics")
+    public Result<PaperStatisticsDTO> getPaperStatistics(@PathVariable Integer paperId,
+                                                         @RequestParam(required = false) Integer classId,
+                                                         @RequestParam(required = false) List<Integer> studentIds) {
+        return Result.success(teacherService.getPaperStatistics(
+                paperId,
+                classId,
+                studentIds == null ? new ArrayList<>() : studentIds
+        ));
+    }
+
+    @GetMapping("/papers/{paperId}/leaderboard")
+    public Result<List<LeaderboardItemDTO>> getLeaderboard(@PathVariable Integer paperId) {
+        return Result.success(teacherService.getLeaderboard(paperId));
     }
 
     @PostMapping("/exam-records/{recordId}/grade")
