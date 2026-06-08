@@ -1,20 +1,18 @@
-<template>
+﻿<template>
   <nav class="navbar">
     <div class="nav-brand">在线考试系统</div>
     <div class="nav-menu">
       <!-- 学生菜单 -->
       <template v-if="role === 'student'">
         <router-link to="/student">首页</router-link>
-        <router-link to="/student">我的考试</router-link>
-        <router-link to="/student">考试记录</router-link>
+        <router-link to="/student/records">考试记录</router-link>
       </template>
 
       <!-- 教师菜单 -->
       <template v-else-if="role === 'teacher'">
         <router-link to="/teacher">首页</router-link>
-        <router-link to="/teacher">题库管理</router-link>
-        <router-link to="/teacher">试卷管理</router-link>
-        <router-link to="/teacher">阅卷评分</router-link>
+        <router-link to="/teacher/questions">题库管理</router-link>
+        <router-link to="/teacher/papers">试卷管理</router-link>
       </template>
 
       <!-- 管理员菜单 -->

@@ -28,6 +28,9 @@ public class Question {
     @Column(name = "course_id")
     private Integer courseId;
 
+    @Column(name = "created_by")
+    private Integer createdBy;
+
     public Question() {}
 
     public Integer getId() { return id; }
@@ -44,4 +47,6 @@ public class Question {
     public void setReferenceAnswer(String referenceAnswer) { this.referenceAnswer = referenceAnswer; }
     public Integer getCourseId() { return courseId; }
     public void setCourseId(Integer courseId) { this.courseId = courseId; }
+    public Integer getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
 }

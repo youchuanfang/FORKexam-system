@@ -1,13 +1,15 @@
-import request from '../utils/request'
+﻿import request from '../utils/request'
 
-// 创建题目
-export function createQuestion(data) {
-  return request.post('/api/teacher/questions', data)
-}
+// ==================== 题库管理 ====================
 
-// 分页查题库
+// 获取题目列表
 export function getQuestions(params) {
   return request.get('/api/teacher/questions', { params })
+}
+
+// 新增题目
+export function createQuestion(data) {
+  return request.post('/api/teacher/questions', data)
 }
 
 // 修改题目
@@ -20,17 +22,24 @@ export function deleteQuestion(id) {
   return request.delete(`/api/teacher/questions/${id}`)
 }
 
-// 创建试卷
-export function createPaper(data) {
-  return request.post('/api/teacher/papers', data)
-}
+// ==================== 试卷管理 ====================
 
-// 试卷列表
+// 获取试卷列表
 export function getPapers() {
   return request.get('/api/teacher/papers')
 }
 
-// 编辑试卷
+// 获取试卷详情
+export function getPaper(paperId) {
+  return request.get(`/api/teacher/papers/${paperId}`)
+}
+
+// 新增试卷
+export function createPaper(data) {
+  return request.post('/api/teacher/papers', data)
+}
+
+// 修改试卷
 export function updatePaper(id, data) {
   return request.put(`/api/teacher/papers/${id}`, data)
 }
@@ -40,17 +49,24 @@ export function deletePaper(id) {
   return request.delete(`/api/teacher/papers/${id}`)
 }
 
-// 向试卷添加题目
-export function addQuestionToPaper(paperId, data) {
-  return request.post(`/api/teacher/papers/${paperId}/questions`, data)
+// 给试卷组题
+export function assignQuestions(paperId, questions) {
+  return request.post(`/api/teacher/papers/${paperId}/questions`, questions)
 }
+
+// ==================== 阅卷评分 ====================
 
 // 查看考试记录
 export function getExamRecords(params) {
   return request.get('/api/teacher/exam-records', { params })
 }
 
-// 批改主观题
-export function gradeExam(recordId, data) {
+// 查看考试记录详情
+export function getExamRecordDetail(recordId) {
+  return request.get(`/api/teacher/exam-records/${recordId}`)
+}
+
+// 批改简答题
+export function gradeQuestion(recordId, data) {
   return request.post(`/api/teacher/exam-records/${recordId}/grade`, data)
 }

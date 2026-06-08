@@ -86,7 +86,7 @@ public class StudentServiceImpl implements StudentService {
     public StartExamResponse startExam(StartExamRequest request) {
         Integer studentId = ensureStudent();
         if (request == null || request.getPaperId() == null) {
-            throw new RuntimeException("paperId不能为空");
+            throw new RuntimeException("paperId涓嶈兘涓虹┖");
         }
 
         Paper paper = getPaperOrThrow(request.getPaperId());
@@ -122,14 +122,14 @@ public class StudentServiceImpl implements StudentService {
         ExamRecord record = getRecordOrThrow(recordId);
         ensureRecordOwner(record, studentId);
         if (record.getSubmitTime() != null) {
-            throw new RuntimeException("该考试记录已提交，不能重复提交");
+            throw new RuntimeException("璇ヨ€冭瘯璁板綍宸叉彁浜わ紝涓嶈兘閲嶅鎻愪氦");
         }
         Paper paper = getPaperOrThrow(record.getPaperId());
         ensurePaperOpenForAnswering(paper);
 
         List<PaperQuestion> paperQuestions = paperQuestionRepository.findByPaperId(record.getPaperId());
         if (paperQuestions.isEmpty()) {
-            throw new RuntimeException("试卷没有题目，不能提交");
+            throw new RuntimeException("璇曞嵎娌℃湁棰樼洰锛屼笉鑳芥彁浜");
         }
 
         Map<Integer, PaperQuestion> paperQuestionMap = paperQuestions.stream()
@@ -176,7 +176,7 @@ public class StudentServiceImpl implements StudentService {
         response.setRecordId(record.getId());
         response.setTotalScore(totalScore);
         response.setObjectiveScore(objectiveScore);
-        response.setMessage("提交成功，主观题暂按0分计入，待教师批改");
+        response.setMessage("鎻愪氦鎴愬姛锛屼富瑙傞鏆傛寜0鍒嗚鍏ワ紝寰呮暀甯堟壒鏀");
         return response;
     }
 
@@ -205,7 +205,7 @@ public class StudentServiceImpl implements StudentService {
                 .collect(Collectors.toMap(Question::getId, Function.identity()));
 
         boolean teacherOpenAnswer = Boolean.TRUE.equals(paper.getTeacherOpenAnswer());
-        boolean canReturnAnswers = teacherOpenAnswer && isAnswerReviewTimeReached(record, paper);
+        boolean canReturnAnswers = teacherOpenAnswer && isAnswerAvailable(paper, record);
         List<AnswerDetailDTO> answers = answerDetailRepository.findByRecordId(record.getId()).stream()
                 .sorted(Comparator.comparing(AnswerDetail::getQuestionId, Comparator.nullsLast(Integer::compareTo)))
                 .map(detail -> toAnswerDetailDTO(
@@ -284,7 +284,7 @@ public class StudentServiceImpl implements StudentService {
     }
 
     private PaperListDTO buildPaperListDTO(Paper paper, List<ExamRecord> studentRecords) {
-        int maxAttempts = 1; // Temporary compatibility until teacher-side paper settings add maxAttempts.
+        int maxAttempts = paper.getMaxAttempts() != null ? paper.getMaxAttempts() : 1;
         List<ExamRecord> recordsForPaper = studentRecords.stream()
                 .filter(record -> Objects.equals(record.getPaperId(), paper.getId()))
                 .collect(Collectors.toList());
@@ -306,16 +306,16 @@ public class StudentServiceImpl implements StudentService {
         LocalDateTime now = LocalDateTime.now();
         if (paper.getOpenStartTime() != null && now.isBefore(paper.getOpenStartTime())) {
             dto.setStatus("NOT_OPEN");
-            dto.setStatusText("考试未开放");
+            dto.setStatusText("鑰冭瘯鏈紑鏀");
         } else if (paper.getOpenEndTime() != null && !now.isBefore(paper.getOpenEndTime())) {
             dto.setStatus("CLOSED");
-            dto.setStatusText("考试已截止");
+            dto.setStatusText("鑰冭瘯宸叉埅姝");
         } else if (remainingAttempts <= 0) {
             dto.setStatus("NO_ATTEMPTS");
-            dto.setStatusText("作答次数已用完");
+            dto.setStatusText("浣滅瓟娆℃暟宸茬敤瀹");
         } else {
             dto.setStatus("OPEN");
-            dto.setStatusText("已开放");
+            dto.setStatusText("宸插紑鏀");
         }
         return dto;
     }
@@ -330,10 +330,10 @@ public class StudentServiceImpl implements StudentService {
         }
         for (SubmitAnswerDTO answer : request.getAnswers()) {
             if (answer == null || answer.getQuestionId() == null) {
-                throw new RuntimeException("提交答案中存在缺少questionId的项目");
+                throw new RuntimeException("鎻愪氦绛旀涓瓨鍦ㄧ己灏憅uestionId鐨勯」鐩");
             }
             if (!paperQuestionIds.contains(answer.getQuestionId())) {
-                throw new RuntimeException("提交答案中包含不属于当前试卷的题目");
+                throw new RuntimeException("鎻愪氦绛旀涓寘鍚笉灞炰簬褰撳墠璇曞嵎鐨勯鐩");
             }
         }
     }
@@ -408,7 +408,7 @@ public class StudentServiceImpl implements StudentService {
                     .replace("\"", "")
                     .replace("'", "");
         }
-        String[] parts = text.split("[,，]");
+        String[] parts = text.split("[,锛宂");
         List<String> normalized = new ArrayList<>();
         for (String part : parts) {
             String item = part.trim();
@@ -424,43 +424,43 @@ public class StudentServiceImpl implements StudentService {
         Integer userId = UserContext.getUserId();
         String role = UserContext.getRole();
         if (userId == null) {
-            throw new RuntimeException("未登录或token无效");
+            throw new RuntimeException("鏈櫥褰曟垨token鏃犳晥");
         }
         if (!ROLE_STUDENT.equals(role)) {
-            throw new RuntimeException("仅学生角色可以访问该接口");
+            throw new RuntimeException("浠呭鐢熻鑹插彲浠ヨ闂鎺ュ彛");
         }
         return userId;
     }
 
     private Paper getPaperOrThrow(Integer paperId) {
         if (paperId == null) {
-            throw new RuntimeException("paperId不能为空");
+            throw new RuntimeException("paperId涓嶈兘涓虹┖");
         }
         return paperRepository.findById(paperId)
-                .orElseThrow(() -> new RuntimeException("试卷不存在"));
+                .orElseThrow(() -> new RuntimeException("璇曞嵎涓嶅瓨鍦?"));
     }
 
     private ExamRecord getRecordOrThrow(Integer recordId) {
         if (recordId == null) {
-            throw new RuntimeException("recordId不能为空");
+            throw new RuntimeException("recordId涓嶈兘涓虹┖");
         }
         return examRecordRepository.findById(recordId)
-                .orElseThrow(() -> new RuntimeException("考试记录不存在"));
+                .orElseThrow(() -> new RuntimeException("鑰冭瘯璁板綍涓嶅瓨鍦?"));
     }
 
     private void ensureRecordOwner(ExamRecord record, Integer studentId) {
         if (!Objects.equals(record.getStudentId(), studentId)) {
-            throw new RuntimeException("不能访问或提交别人的考试记录");
+            throw new RuntimeException("涓嶈兘璁块棶鎴栨彁浜ゅ埆浜虹殑鑰冭瘯璁板綍");
         }
     }
 
     private void ensurePaperOpenForAnswering(Paper paper) {
         LocalDateTime now = LocalDateTime.now();
         if (paper.getOpenStartTime() != null && now.isBefore(paper.getOpenStartTime())) {
-            throw new RuntimeException("考试尚未到开放时间，不能作答");
+            throw new RuntimeException("鑰冭瘯灏氭湭鍒板紑鏀炬椂闂达紝涓嶈兘浣滅瓟");
         }
         if (paper.getOpenEndTime() != null && !now.isBefore(paper.getOpenEndTime())) {
-            throw new RuntimeException("考试已截止，不能作答");
+            throw new RuntimeException("鑰冭瘯宸叉埅姝紝涓嶈兘浣滅瓟");
         }
     }
 
@@ -468,7 +468,7 @@ public class StudentServiceImpl implements StudentService {
         ExamRecordDTO dto = new ExamRecordDTO();
         dto.setRecordId(record.getId());
         dto.setPaperId(record.getPaperId());
-        dto.setPaperTitle(paper == null ? "未知试卷" : paper.getTitle());
+        dto.setPaperTitle(paper == null ? "鏈煡璇曞嵎" : paper.getTitle());
         dto.setStartTime(record.getStartTime());
         dto.setSubmitTime(record.getSubmitTime());
         dto.setTotalScore(record.getTotalScore());
@@ -496,6 +496,16 @@ public class StudentServiceImpl implements StudentService {
             dto.setScore(paperQuestion.getScore());
         }
         return dto;
+    }
+
+    private boolean isAnswerAvailable(Paper paper, ExamRecord record) {
+        if (Boolean.TRUE.equals(paper.getReleaseAnswerFlag())) {
+            if (paper.getAnswerReleaseTime() != null) {
+                return !LocalDateTime.now().isBefore(paper.getAnswerReleaseTime());
+            }
+            return true;
+        }
+        return isAnswerReviewTimeReached(record, paper);
     }
 
     private boolean isAnswerReviewTimeReached(ExamRecord record, Paper paper) {
@@ -537,3 +547,5 @@ public class StudentServiceImpl implements StudentService {
 
     private record GradeResult(Boolean isCorrect, Double scoreGot) {}
 }
+
+

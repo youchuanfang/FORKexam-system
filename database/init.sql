@@ -1,11 +1,11 @@
--- ========================================
+﻿-- ========================================
 -- 在线考试系统 - 数据库初始化脚本
 -- 数据库：SQL Server
 -- 数据库名：exam_system
 -- ========================================
 
 -- 创建数据库（如果不存在则创建）
-IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'exam_system')
+IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N''exam_system'')
 BEGIN
     CREATE DATABASE exam_system;
 END
@@ -17,7 +17,7 @@ GO
 -- ========================================
 -- 1. 用户表
 -- ========================================
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''users'' AND xtype=''U'')
 BEGIN
     CREATE TABLE users (
         id INT IDENTITY(1,1) PRIMARY KEY,
@@ -25,7 +25,7 @@ BEGIN
         password NVARCHAR(255) NOT NULL,
         role NVARCHAR(20) NOT NULL,
         CONSTRAINT UQ_users_username UNIQUE(username),
-        CONSTRAINT CK_users_role CHECK (role IN ('student','teacher','admin'))
+        CONSTRAINT CK_users_role CHECK (role IN (''student'',''teacher'',''admin''))
     );
 END
 GO
@@ -37,7 +37,7 @@ GO
 -- ========================================
 -- 2. 题目表
 -- ========================================
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='questions' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''questions'' AND xtype=''U'')
 BEGIN
     CREATE TABLE questions (
         id INT IDENTITY PRIMARY KEY,
@@ -47,21 +47,28 @@ BEGIN
         answer NVARCHAR(MAX),
         reference_answer NVARCHAR(MAX),
         course_id INT,
-        CONSTRAINT CK_questions_type CHECK (type IN ('single_choice','multi_choice','true_false','fill_blank','short_answer'))
+        CONSTRAINT CK_questions_type CHECK (type IN (''single_choice'',''multi_choice'',''true_false'',''fill_blank'',''short_answer''))
     );
 END
 GO
 
-IF COL_LENGTH('questions', 'reference_answer') IS NULL
+IF COL_LENGTH(''questions'', ''reference_answer'') IS NULL
 BEGIN
     ALTER TABLE questions ADD reference_answer NVARCHAR(MAX) NULL;
+END
+GO
+
+IF COL_LENGTH(''questions'', ''created_by'') IS NULL
+BEGIN
+    ALTER TABLE questions ADD created_by INT NULL;
+    ALTER TABLE questions ADD CONSTRAINT FK_questions_created_by FOREIGN KEY (created_by) REFERENCES users(id);
 END
 GO
 
 -- ========================================
 -- 3. 试卷表
 -- ========================================
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='papers' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''papers'' AND xtype=''U'')
 BEGIN
     CREATE TABLE papers (
         id INT IDENTITY PRIMARY KEY,
@@ -76,28 +83,46 @@ BEGIN
 END
 GO
 
-IF COL_LENGTH('papers', 'teacher_open_answer') IS NULL
+IF COL_LENGTH(''papers'', ''teacher_open_answer'') IS NULL
 BEGIN
     ALTER TABLE papers ADD teacher_open_answer BIT NOT NULL DEFAULT 0;
 END
 GO
 
-IF COL_LENGTH('papers', 'open_start_time') IS NULL
+IF COL_LENGTH(''papers'', ''open_start_time'') IS NULL
 BEGIN
     ALTER TABLE papers ADD open_start_time DATETIME2 NULL;
 END
 GO
 
-IF COL_LENGTH('papers', 'open_end_time') IS NULL
+IF COL_LENGTH(''papers'', ''open_end_time'') IS NULL
 BEGIN
     ALTER TABLE papers ADD open_end_time DATETIME2 NULL;
+END
+GO
+
+IF COL_LENGTH(''papers'', ''max_attempts'') IS NULL
+BEGIN
+    ALTER TABLE papers ADD max_attempts INT NOT NULL DEFAULT 1;
+END
+GO
+
+IF COL_LENGTH(''papers'', ''release_answer_flag'') IS NULL
+BEGIN
+    ALTER TABLE papers ADD release_answer_flag BIT NOT NULL DEFAULT 0;
+END
+GO
+
+IF COL_LENGTH(''papers'', ''answer_release_time'') IS NULL
+BEGIN
+    ALTER TABLE papers ADD answer_release_time DATETIME2 NULL;
 END
 GO
 
 -- ========================================
 -- 4. 试卷-题目关联表
 -- ========================================
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='paper_questions' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''paper_questions'' AND xtype=''U'')
 BEGIN
     CREATE TABLE paper_questions (
         id INT IDENTITY PRIMARY KEY,
@@ -113,7 +138,7 @@ GO
 -- ========================================
 -- 5. 考试记录表
 -- ========================================
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='exam_records' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''exam_records'' AND xtype=''U'')
 BEGIN
     CREATE TABLE exam_records (
         id INT IDENTITY PRIMARY KEY,
@@ -135,7 +160,7 @@ GO
 -- ========================================
 -- 6. 答题明细表
 -- ========================================
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='answer_details' AND xtype='U')
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name=''answer_details'' AND xtype=''U'')
 BEGIN
     CREATE TABLE answer_details (
         id INT IDENTITY PRIMARY KEY,
@@ -153,5 +178,5 @@ GO
 CREATE NONCLUSTERED INDEX idx_answer_details_record ON answer_details(record_id);
 GO
 
-PRINT '数据库初始化完成！所有表已创建。';
+PRINT ''数据库初始化完成！所有表已创建。'';
 GO

@@ -2,8 +2,18 @@ package com.exam.repository;
 
 import com.exam.entity.Question;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import java.util.List;
 
 @Repository
 public interface QuestionRepository extends JpaRepository<Question, Integer> {
+
+    @Query("SELECT q FROM Question q WHERE q.createdBy IS NULL OR q.createdBy = :teacherId")
+    List<Question> findAccessibleQuestions(@Param("teacherId") Integer teacherId);
+
+    @Query("SELECT q FROM Question q WHERE (q.createdBy IS NULL OR q.createdBy = :teacherId) AND q.type = :type")
+    List<Question> findAccessibleByType(@Param("teacherId") Integer teacherId, @Param("type") String type);
 }

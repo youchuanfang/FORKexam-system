@@ -28,6 +28,15 @@ public class Paper {
     @Column(name = "open_end_time")
     private LocalDateTime openEndTime;
 
+    @Column(name = "max_attempts")
+    private Integer maxAttempts = 1;
+
+    @Column(name = "release_answer_flag")
+    private Boolean releaseAnswerFlag = false;
+
+    @Column(name = "answer_release_time")
+    private LocalDateTime answerReleaseTime;
+
     public Paper() {}
 
     public Integer getId() { return id; }
@@ -44,4 +53,10 @@ public class Paper {
     public void setOpenStartTime(LocalDateTime openStartTime) { this.openStartTime = openStartTime; }
     public LocalDateTime getOpenEndTime() { return openEndTime; }
     public void setOpenEndTime(LocalDateTime openEndTime) { this.openEndTime = openEndTime; }
+    public Integer getMaxAttempts() { return maxAttempts; }
+    public void setMaxAttempts(Integer maxAttempts) { this.maxAttempts = maxAttempts; }
+    public Boolean getReleaseAnswerFlag() { return releaseAnswerFlag; }
+    public void setReleaseAnswerFlag(Boolean releaseAnswerFlag) { this.releaseAnswerFlag = releaseAnswerFlag; }
+    public LocalDateTime getAnswerReleaseTime() { return answerReleaseTime; }
+    public void setAnswerReleaseTime(LocalDateTime answerReleaseTime) { this.answerReleaseTime = answerReleaseTime; }
 }

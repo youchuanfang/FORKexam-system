@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
@@ -47,6 +47,42 @@ const routes = [
     meta: { requiresAuth: true, role: 'teacher' }
   },
   {
+    path: '/teacher/questions',
+    name: 'TeacherQuestionBank',
+    component: () => import('../views/teacher/TeacherQuestionBank.vue'),
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  {
+    path: '/teacher/papers',
+    name: 'TeacherPaperList',
+    component: () => import('../views/teacher/TeacherPaperList.vue'),
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  {
+    path: '/teacher/papers/new',
+    name: 'TeacherPaperNew',
+    component: () => import('../views/teacher/TeacherPaperEditor.vue'),
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  {
+    path: '/teacher/papers/:paperId/edit',
+    name: 'TeacherPaperEdit',
+    component: () => import('../views/teacher/TeacherPaperEditor.vue'),
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  {
+    path: '/teacher/papers/:paperId/records',
+    name: 'TeacherRecordList',
+    component: () => import('../views/teacher/TeacherRecordList.vue'),
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  {
+    path: '/teacher/records/:recordId',
+    name: 'TeacherRecordDetail',
+    component: () => import('../views/teacher/TeacherRecordDetail.vue'),
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  {
     path: '/admin',
     name: 'AdminHome',
     component: () => import('../views/admin/AdminHome.vue'),
@@ -64,7 +100,6 @@ router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   const role = localStorage.getItem('role')
 
-  // 访问登录页：已登录则跳转到对应首页
   if (to.path === '/login') {
     if (token && role) {
       next('/' + role)
@@ -74,13 +109,11 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  // 未登录 → 跳转登录页
   if (!token) {
     next('/login')
     return
   }
 
-  // 已登录但角色不匹配 → 跳转到自己的首页
   if (to.meta.role && to.meta.role !== role) {
     next('/' + role)
     return
