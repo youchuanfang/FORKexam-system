@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:sqlserver://localhost:1433;databaseName=exam_system;encrypt=false;trustServerCertificate=true
-    username: sa
-    password: ANNIE@20051122
+    url: ${DB_URL:jdbc:sqlserver://localhost:1433;databaseName=exam_system;encrypt=false;trustServerCertificate=true}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
   jpa:
     hibernate:
@@ -17,5 +17,5 @@ spring:
         format_sql: true
 
 jwt:
-  secret: exam-system-secret-key-2026-very-long-secret-key-for-jwt-signing
-  expiration: 86400000
+  secret: ${JWT_SECRET:exam-system-dev-secret-key-change-me-change-me-change-me}
+  expiration: ${JWT_EXPIRATION:86400000}

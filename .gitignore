@@ -19,3 +19,9 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local private config
+backend/src/main/resources/application-local.yml
+backend/src/main/resources/application-dev.yml
+.env
+*.env
