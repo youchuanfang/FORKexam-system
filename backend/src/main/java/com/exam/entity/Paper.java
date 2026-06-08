@@ -37,6 +37,15 @@ public class Paper {
     @Column(name = "answer_release_time")
     private LocalDateTime answerReleaseTime;
 
+    @Column
+    private Boolean published = false;
+
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
+    @Column(name = "leaderboard_public")
+    private Boolean leaderboardPublic = false;
+
     public Paper() {}
 
     public Integer getId() { return id; }
@@ -59,4 +68,10 @@ public class Paper {
     public void setReleaseAnswerFlag(Boolean releaseAnswerFlag) { this.releaseAnswerFlag = releaseAnswerFlag; }
     public LocalDateTime getAnswerReleaseTime() { return answerReleaseTime; }
     public void setAnswerReleaseTime(LocalDateTime answerReleaseTime) { this.answerReleaseTime = answerReleaseTime; }
+    public Boolean getPublished() { return published; }
+    public void setPublished(Boolean published) { this.published = published; }
+    public LocalDateTime getPublishedAt() { return publishedAt; }
+    public void setPublishedAt(LocalDateTime publishedAt) { this.publishedAt = publishedAt; }
+    public Boolean getLeaderboardPublic() { return leaderboardPublic; }
+    public void setLeaderboardPublic(Boolean leaderboardPublic) { this.leaderboardPublic = leaderboardPublic; }
 }

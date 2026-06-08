@@ -53,6 +53,35 @@
         </div>
       </div>
 
+      <div class="target-panel">
+        <h4>发布范围</h4>
+        <label class="checkbox-label inline">
+          <input v-model="targetAll" type="checkbox" />
+          全部学生
+        </label>
+        <div class="form-row" v-if="!targetAll">
+          <div class="form-group flex-1">
+            <label>指定班级</label>
+            <div class="check-grid">
+              <label v-for="item in classes" :key="item.id" class="check-item">
+                <input v-model="selectedClassIds" type="checkbox" :value="item.id" />
+                {{ item.name }}
+              </label>
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label>指定学生</label>
+            <input v-model="studentKeyword" placeholder="搜索学生用户名" @input="loadStudents" />
+            <div class="check-grid">
+              <label v-for="item in students" :key="item.id" class="check-item">
+                <input v-model="selectedStudentIds" type="checkbox" :value="item.id" />
+                {{ item.username }}
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button class="primary-btn" type="button" :disabled="saving" @click="savePaper">{{ saving ? '保存中...' : '保存试卷信息' }}</button>
         <p v-if="saveMsg" :class="saveError ? 'error-text' : 'state-text'" style="margin-left:12px">{{ saveMsg }}</p>
@@ -125,7 +154,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getPaper, createPaper, updatePaper, assignQuestions, getQuestions, getPaperQuestions } from '../../api/teacher'
+import { getPaper, createPaper, updatePaper, assignQuestions, getQuestions, getPaperQuestions, getClasses, getStudents } from '../../api/teacher'
 
 const route = useRoute()
 const router = useRouter()
@@ -180,6 +209,12 @@ const assignedQuestions = ref([])
 const selectedIds = computed(() => new Set(assignedQuestions.value.map(a => a.questionId)))
 const savingQuestions = ref(false)
 const qError = ref('')
+const classes = ref([])
+const students = ref([])
+const studentKeyword = ref('')
+const targetAll = ref(false)
+const selectedClassIds = ref([])
+const selectedStudentIds = ref([])
 
 const filteredPool = computed(() => {
   let list = poolQuestions.value
@@ -222,6 +257,41 @@ async function loadPool() {
 
 watch(pickerType, () => { loadPool() })
 
+function buildTargets() {
+  if (targetAll.value) {
+    return [{ targetType: 'ALL', targetId: null }]
+  }
+  return [
+    ...selectedClassIds.value.map(id => ({ targetType: 'CLASS', targetId: id })),
+    ...selectedStudentIds.value.map(id => ({ targetType: 'STUDENT', targetId: id }))
+  ]
+}
+
+function applyTargets(targets) {
+  const list = targets || []
+  targetAll.value = list.some(item => item.targetType === 'ALL')
+  selectedClassIds.value = list.filter(item => item.targetType === 'CLASS').map(item => item.targetId)
+  selectedStudentIds.value = list.filter(item => item.targetType === 'STUDENT').map(item => item.targetId)
+}
+
+async function loadClasses() {
+  try {
+    const res = await getClasses()
+    if (res.code === 200) classes.value = res.data || []
+  } catch {
+    classes.value = []
+  }
+}
+
+async function loadStudents() {
+  try {
+    const res = await getStudents(studentKeyword.value ? { keyword: studentKeyword.value } : {})
+    if (res.code === 200) students.value = res.data || []
+  } catch {
+    students.value = []
+  }
+}
+
 async function loadExistingQuestions(pid) {
   if (!pid) return
   try {
@@ -254,6 +324,7 @@ async function loadPaper() {
       form.value.openEndTime = toLocalDatetime(p.openEndTime)
       form.value.releaseAnswerFlag = p.releaseAnswerFlag || false
       form.value.answerReleaseTime = toLocalDatetime(p.answerReleaseTime)
+      applyTargets(p.targets)
     } else {
       loadError.value = res.message || '加载失败'
     }
@@ -279,7 +350,8 @@ async function savePaper() {
       openStartTime: form.value.openStartTime || null,
       openEndTime: form.value.openEndTime || null,
       releaseAnswerFlag: form.value.releaseAnswerFlag,
-      answerReleaseTime: form.value.answerReleaseTime || null
+      answerReleaseTime: form.value.answerReleaseTime || null,
+      targets: buildTargets()
     }
     let res
     if (isNew) {
@@ -288,6 +360,10 @@ async function savePaper() {
       res = await updatePaper(paperId.value, data)
     }
     if (res.code === 200) {
+      const currentPaperId = isNew ? res.data?.id : paperId.value
+      if (currentPaperId && assignedQuestions.value.length > 0) {
+        await saveQuestionScores(currentPaperId)
+      }
       saveMsg.value = '保存成功'
       if (isNew && res.data && res.data.id) {
         paperId.value = res.data.id
@@ -305,6 +381,14 @@ async function savePaper() {
   }
 }
 
+async function saveQuestionScores(targetPaperId) {
+  const data = assignedQuestions.value.map(a => ({ questionId: a.questionId, score: a.score || 0 }))
+  const res = await assignQuestions(targetPaperId, data)
+  if (res.code !== 200) {
+    throw new Error(res.message || '保存题目分值失败')
+  }
+}
+
 async function saveQuestions() {
   if (assignedQuestions.value.length === 0) {
     qError.value = '请至少选择一道题目'
@@ -313,14 +397,9 @@ async function saveQuestions() {
   savingQuestions.value = true
   qError.value = ''
   try {
-    const data = assignedQuestions.value.map(a => ({ questionId: a.questionId, score: a.score || 0 }))
-    const res = await assignQuestions(paperId.value, data)
-    if (res.code === 200) {
-      qError.value = ''
-      alert('选题保存成功')
-    } else {
-      qError.value = res.message || '保存失败'
-    }
+    await saveQuestionScores(paperId.value)
+    qError.value = ''
+    alert('分值已保存，已同步更新已提交学生成绩')
   } catch (err) {
     qError.value = err.response?.data?.message || err.message || '保存失败'
   } finally {
@@ -329,6 +408,7 @@ async function saveQuestions() {
 }
 
 onMounted(async () => {
+  await Promise.all([loadClasses(), loadStudents()])
   await loadPaper()
   if (paperId.value) {
     await loadExistingQuestions(paperId.value)
@@ -404,7 +484,38 @@ h1 { color: #1f2937; font-size: 28px; margin-bottom: 8px; }
   font-size: 14px; margin-top: 22px;
 }
 
+.checkbox-label.inline { margin-top: 0; }
+
 .checkbox-label input[type="checkbox"] { width: 16px; height: 16px; }
+
+.target-panel {
+  border-top: 1px solid #e5e7eb;
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.target-panel h4 { color: #1f2937; margin: 0; }
+
+.check-grid {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.check-item {
+  align-items: center;
+  color: #374151;
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+}
+
 
 .form-actions {
   display: flex; align-items: center; margin-top: 16px;

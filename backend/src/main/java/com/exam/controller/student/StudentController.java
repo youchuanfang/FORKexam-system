@@ -1,6 +1,8 @@
 package com.exam.controller.student;
 
 import com.exam.common.Result;
+import com.exam.dto.common.ClassRoomDTO;
+import com.exam.dto.common.LeaderboardItemDTO;
 import com.exam.dto.student.ExamRecordDTO;
 import com.exam.dto.student.ExamRecordDetailDTO;
 import com.exam.dto.student.PaperDetailDTO;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/student")
@@ -58,5 +61,20 @@ public class StudentController {
     @GetMapping("/exam-records/{recordId}")
     public Result<ExamRecordDetailDTO> getExamRecordDetail(@PathVariable Integer recordId) {
         return Result.success(studentService.getExamRecordDetail(recordId));
+    }
+
+    @GetMapping("/classes")
+    public Result<List<ClassRoomDTO>> getMyClasses() {
+        return Result.success(studentService.getMyClasses());
+    }
+
+    @PostMapping("/classes/join")
+    public Result<ClassRoomDTO> joinClass(@RequestBody Map<String, String> body) {
+        return Result.success(studentService.joinClass(body == null ? null : body.get("joinCode")));
+    }
+
+    @GetMapping("/papers/{paperId}/leaderboard")
+    public Result<List<LeaderboardItemDTO>> getLeaderboard(@PathVariable Integer paperId) {
+        return Result.success(studentService.getLeaderboard(paperId));
     }
 }

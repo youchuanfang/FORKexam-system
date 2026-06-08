@@ -39,6 +39,20 @@
           </article>
         </div>
         <p v-else class="state-text">暂无答题明细。</p>
+
+        <div v-if="record.leaderboardPublic" class="leaderboard-panel">
+          <h3>排行榜</h3>
+          <p v-if="leaderboardLoading" class="state-text">加载排行榜中...</p>
+          <div v-else class="leaderboard-list">
+            <div v-for="item in leaderboard" :key="`${item.rank}-${item.username}`" class="leaderboard-row">
+              <span>#{{ item.rank }}</span>
+              <span>{{ item.username }}</span>
+              <strong>{{ item.score ?? 0 }} 分</strong>
+              <small>{{ formatTime(item.submitTime) }}</small>
+            </div>
+            <p v-if="leaderboard.length === 0" class="state-text">暂无排行榜数据。</p>
+          </div>
+        </div>
       </template>
     </section>
   </div>
@@ -47,12 +61,14 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { getExamRecordDetail } from '../../api/student'
+import { getExamRecordDetail, getLeaderboard } from '../../api/student'
 
 const route = useRoute()
 const record = ref(null)
 const loading = ref(false)
 const error = ref('')
+const leaderboard = ref([])
+const leaderboardLoading = ref(false)
 
 const labels = {
   single_choice: '单选题',
@@ -110,6 +126,9 @@ async function loadRecord() {
     const res = await getExamRecordDetail(route.params.recordId)
     if (res.code === 200) {
       record.value = res.data
+      if (record.value?.leaderboardPublic) {
+        await loadLeaderboard()
+      }
     } else {
       error.value = res.message || '获取考试记录详情失败'
     }
@@ -117,6 +136,16 @@ async function loadRecord() {
     error.value = err.response?.data?.message || err.message || '获取考试记录详情失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadLeaderboard() {
+  leaderboardLoading.value = true
+  try {
+    const res = await getLeaderboard(record.value.paperId)
+    leaderboard.value = res.code === 200 ? (res.data || []) : []
+  } finally {
+    leaderboardLoading.value = false
   }
 }
 
@@ -146,8 +175,13 @@ h1 { color: #111827; font-size: 26px; margin-bottom: 8px; }
 .correct-answer p { color: #166534; white-space: pre-wrap; }
 .secondary-btn { background: #fff; border: 1px solid #d1d5db; border-radius: 6px; color: #374151; cursor: pointer; font-size: 14px; padding: 9px 14px; text-decoration: none; }
 .error-text { color: #dc2626; }
+.leaderboard-panel { border-top: 1px solid #e5e7eb; margin-top: 18px; padding-top: 18px; }
+.leaderboard-panel h3 { color: #111827; margin: 0 0 10px; }
+.leaderboard-list { display: grid; gap: 6px; }
+.leaderboard-row { align-items: center; background: #f9fafb; border-radius: 6px; display: grid; gap: 10px; grid-template-columns: 54px 1fr 90px 170px; padding: 8px 10px; }
 @media (max-width: 720px) {
   .student-page { padding: 20px; }
   .record-summary, .answer-head { flex-direction: column; }
+  .leaderboard-row { grid-template-columns: 44px 1fr; }
 }
 </style>

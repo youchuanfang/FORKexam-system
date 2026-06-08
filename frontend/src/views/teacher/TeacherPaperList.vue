@@ -25,6 +25,9 @@
               <span>最大次数：{{ paper.maxAttempts ?? 1 }}</span>
               <span>题目数：{{ paper.questionCount ?? 0 }}</span>
               <span>考试记录：{{ paper.recordCount ?? 0 }}</span>
+              <span>{{ paper.published ? '已发布' : '草稿' }}</span>
+              <span>范围：{{ paper.targetSummary || '未设置' }}</span>
+              <span>平均分：{{ paper.averageScore == null ? '-' : paper.averageScore }}</span>
               <span>答案已{{ paper.releaseAnswerFlag ? '公开' : '关闭' }}</span>
             </div>
             <div class="paper-time">
@@ -40,6 +43,12 @@
           <div class="paper-actions">
             <router-link class="secondary-btn" :to="`/teacher/papers/${paper.id}/edit`">编辑组卷</router-link>
             <router-link class="secondary-btn" :to="`/teacher/papers/${paper.id}/records`">查看记录</router-link>
+            <button v-if="!paper.published" class="primary-btn" type="button" @click="handlePublish(paper)">确认发布</button>
+            <button class="secondary-btn" type="button" @click="toggleLeaderboard(paper)">排行榜</button>
+            <label class="switch-row">
+              <input :checked="paper.leaderboardPublic" type="checkbox" @change="handleLeaderboardPublic(paper, $event.target.checked)" />
+              公开排行榜
+            </label>
             <button
               class="text-btn danger"
               type="button"
@@ -47,6 +56,38 @@
               :title="(paper.recordCount ?? 0) > 0 ? '该试卷已有考试记录，不能删除' : ''"
               @click="handleDelete(paper)"
             >删除</button>
+          </div>
+          <div v-if="expandedPaperId === paper.id" class="extra-panel">
+            <p v-if="leaderboardLoading" class="state-text">加载排行榜中...</p>
+            <template v-else>
+              <p class="state-text">提交人数：{{ statistics?.submittedCount ?? 0 }}，总平均分：{{ statistics?.overallAverage ?? '-' }}，最高分：{{ statistics?.maxScore ?? '-' }}，最低分：{{ statistics?.minScore ?? '-' }}</p>
+              <div class="stats-block">
+                <strong>班级平均分</strong>
+                <span v-if="!statistics?.classAverages?.length" class="state-text">暂无班级提交数据</span>
+                <span v-for="item in statistics?.classAverages || []" :key="item.classId">
+                  {{ item.className }}：{{ item.averageScore ?? '-' }}（{{ item.submittedCount || 0 }} 人）
+                </span>
+              </div>
+              <div class="stats-block">
+                <strong>指定学生平均分</strong>
+                <div class="student-checks">
+                  <label v-for="student in students" :key="student.id">
+                    <input v-model="selectedStudentIds" type="checkbox" :value="student.id" @change="refreshStatistics(paper)" />
+                    {{ student.username }}
+                  </label>
+                </div>
+                <span>当前选择：{{ statistics?.selectedStudentsAverage ?? '-' }}</span>
+              </div>
+              <div class="leaderboard-list">
+                <div v-for="item in leaderboard" :key="`${item.rank}-${item.username}`" class="leaderboard-row">
+                  <span>#{{ item.rank }}</span>
+                  <span>{{ item.username }}</span>
+                  <strong>{{ item.score ?? 0 }}</strong>
+                  <small>{{ formatTime(item.submitTime) }}</small>
+                </div>
+              </div>
+              <p v-if="leaderboard.length === 0" class="state-text">暂无排行榜数据。</p>
+            </template>
           </div>
         </article>
       </div>
@@ -56,11 +97,17 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { getPapers, deletePaper } from '../../api/teacher'
+import { getPapers, deletePaper, publishPaper, updateLeaderboardVisibility, getLeaderboard, getPaperStatistics, getStudents } from '../../api/teacher'
 
 const papers = ref([])
 const loading = ref(false)
 const error = ref('')
+const expandedPaperId = ref(null)
+const leaderboard = ref([])
+const statistics = ref(null)
+const leaderboardLoading = ref(false)
+const students = ref([])
+const selectedStudentIds = ref([])
 
 function formatTime(value) {
   return value ? value.replace('T', ' ').slice(0, 19) : ''
@@ -98,6 +145,59 @@ async function handleDelete(paper) {
     }
   } catch (err) {
     error.value = err.response?.data?.message || err.message || '删除失败'
+  }
+}
+
+async function handlePublish(paper) {
+  if (!paper.targets?.length) {
+    error.value = '请先在编辑组卷页设置发布范围'
+    return
+  }
+  if (!confirm(`确认发布试卷 "${paper.title}" 吗？`)) return
+  try {
+    const res = await publishPaper(paper.id, paper.targets)
+    if (res.code === 200) await loadPapers()
+    else error.value = res.message || '发布失败'
+  } catch (err) {
+    error.value = err.response?.data?.message || err.message || '发布失败'
+  }
+}
+
+async function handleLeaderboardPublic(paper, visible) {
+  try {
+    const res = await updateLeaderboardVisibility(paper.id, visible)
+    if (res.code === 200) {
+      paper.leaderboardPublic = visible
+    } else {
+      error.value = res.message || '更新排行榜公开状态失败'
+    }
+  } catch (err) {
+    error.value = err.response?.data?.message || err.message || '更新排行榜公开状态失败'
+  }
+}
+
+async function toggleLeaderboard(paper) {
+  if (expandedPaperId.value === paper.id) {
+    expandedPaperId.value = null
+    return
+  }
+  expandedPaperId.value = paper.id
+  leaderboardLoading.value = true
+  try {
+    selectedStudentIds.value = []
+    const [rankRes, statRes, studentRes] = await Promise.all([getLeaderboard(paper.id), getPaperStatistics(paper.id), getStudents({})])
+    leaderboard.value = rankRes.code === 200 ? (rankRes.data || []) : []
+    statistics.value = statRes.code === 200 ? statRes.data : null
+    students.value = studentRes.code === 200 ? (studentRes.data || []) : []
+  } finally {
+    leaderboardLoading.value = false
+  }
+}
+
+async function refreshStatistics(paper) {
+  const res = await getPaperStatistics(paper.id, { studentIds: selectedStudentIds.value.join(',') })
+  if (res.code === 200) {
+    statistics.value = res.data
   }
 }
 
@@ -144,6 +244,7 @@ h1 { color: #1f2937; font-size: 28px; margin-bottom: 8px; }
 
 .paper-card {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
@@ -166,6 +267,60 @@ h1 { color: #1f2937; font-size: 28px; margin-bottom: 8px; }
 .paper-actions {
   display: flex; flex-direction: column; gap: 6px;
   align-items: flex-end;
+}
+
+.extra-panel {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 14px;
+  padding-top: 14px;
+  width: 100%;
+}
+
+.leaderboard-list { display: grid; gap: 6px; margin-top: 10px; }
+
+.stats-block {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.stats-block strong { color: #374151; width: 100%; }
+
+.student-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  width: 100%;
+}
+
+.student-checks label {
+  align-items: center;
+  color: #374151;
+  display: flex;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.leaderboard-row {
+  align-items: center;
+  background: #f9fafb;
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 54px 1fr 80px 170px;
+  padding: 8px 10px;
+}
+
+.switch-row {
+  align-items: center;
+  color: #374151;
+  display: flex;
+  font-size: 13px;
+  gap: 6px;
 }
 
 .primary-btn, .secondary-btn, .text-btn {
@@ -203,5 +358,6 @@ h1 { color: #1f2937; font-size: 28px; margin-bottom: 8px; }
   .teacher-page { padding: 20px; }
   .page-header, .paper-card { flex-direction: column; }
   .paper-actions { align-items: stretch; flex-direction: row; flex-wrap: wrap; }
+  .leaderboard-row { grid-template-columns: 44px 1fr; }
 }
 </style>

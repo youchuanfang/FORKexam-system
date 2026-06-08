@@ -41,6 +41,12 @@ const routes = [
     meta: { requiresAuth: true, role: 'student' }
   },
   {
+    path: '/student/classes',
+    name: 'StudentClasses',
+    component: () => import('../views/student/StudentClasses.vue'),
+    meta: { requiresAuth: true, role: 'student' }
+  },
+  {
     path: '/teacher',
     name: 'TeacherHome',
     component: () => import('../views/teacher/TeacherHome.vue'),
@@ -50,6 +56,12 @@ const routes = [
     path: '/teacher/questions',
     name: 'TeacherQuestionBank',
     component: () => import('../views/teacher/TeacherQuestionBank.vue'),
+    meta: { requiresAuth: true, role: 'teacher' }
+  },
+  {
+    path: '/teacher/classes',
+    name: 'TeacherClasses',
+    component: () => import('../views/teacher/TeacherClassManager.vue'),
     meta: { requiresAuth: true, role: 'teacher' }
   },
   {

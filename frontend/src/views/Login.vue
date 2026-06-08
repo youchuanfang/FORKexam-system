@@ -82,7 +82,8 @@ async function handleLogin() {
   try {
     const res = await request.post('/api/user/login', {
       username: username.value,
-      password: password.value
+      password: password.value,
+      role: role.value
     })
     if (res.code === 200) {
       setAuth(res.data.token, res.data.role)

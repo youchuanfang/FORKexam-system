@@ -1,12 +1,17 @@
 package com.exam.service.teacher;
 
 import com.exam.common.UserContext;
+import com.exam.dto.common.ClassRoomDTO;
+import com.exam.dto.common.LeaderboardItemDTO;
+import com.exam.dto.common.PaperTargetDTO;
+import com.exam.dto.common.StudentDTO;
 import com.exam.dto.teacher.*;
 import com.exam.entity.*;
 import com.exam.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,19 +29,28 @@ public class TeacherServiceImpl implements TeacherService {
     private final ExamRecordRepository examRecordRepository;
     private final AnswerDetailRepository answerDetailRepository;
     private final UserRepository userRepository;
+    private final ClassRoomRepository classRoomRepository;
+    private final ClassMemberRepository classMemberRepository;
+    private final PaperTargetRepository paperTargetRepository;
 
     public TeacherServiceImpl(QuestionRepository questionRepository,
                               PaperRepository paperRepository,
                               PaperQuestionRepository paperQuestionRepository,
                               ExamRecordRepository examRecordRepository,
                               AnswerDetailRepository answerDetailRepository,
-                              UserRepository userRepository) {
+                              UserRepository userRepository,
+                              ClassRoomRepository classRoomRepository,
+                              ClassMemberRepository classMemberRepository,
+                              PaperTargetRepository paperTargetRepository) {
         this.questionRepository = questionRepository;
         this.paperRepository = paperRepository;
         this.paperQuestionRepository = paperQuestionRepository;
         this.examRecordRepository = examRecordRepository;
         this.answerDetailRepository = answerDetailRepository;
         this.userRepository = userRepository;
+        this.classRoomRepository = classRoomRepository;
+        this.classMemberRepository = classMemberRepository;
+        this.paperTargetRepository = paperTargetRepository;
     }
 
     // ==================== Question Management ====================
@@ -155,11 +169,15 @@ public class TeacherServiceImpl implements TeacherService {
         paper.setReleaseAnswerFlag(releaseAnswerFlag);
         paper.setTeacherOpenAnswer(releaseAnswerFlag);
         paper.setAnswerReleaseTime(releaseAnswerFlag ? dto.getAnswerReleaseTime() : null);
+        paper.setPublished(false);
+        paper.setLeaderboardPublic(Boolean.TRUE.equals(dto.getLeaderboardPublic()));
         paper = paperRepository.save(paper);
+        savePaperTargets(paper.getId(), dto.getTargets(), false);
         return toPaperListDTO(paper, Map.of(), Map.of());
     }
 
     @Override
+    @Transactional
     public PaperListDTO updatePaper(Integer paperId, PaperListDTO dto) {
         Integer teacherId = ensureTeacher();
         Paper paper = getPaperOrThrow(paperId);
@@ -176,7 +194,11 @@ public class TeacherServiceImpl implements TeacherService {
             paper.setTeacherOpenAnswer(dto.getReleaseAnswerFlag());
         }
         paper.setAnswerReleaseTime(Boolean.TRUE.equals(paper.getReleaseAnswerFlag()) ? dto.getAnswerReleaseTime() : null);
+        if (dto.getLeaderboardPublic() != null) paper.setLeaderboardPublic(dto.getLeaderboardPublic());
         paper = paperRepository.save(paper);
+        if (dto.getTargets() != null) {
+            savePaperTargets(paperId, dto.getTargets(), false);
+        }
         List<PaperQuestion> pqs = paperQuestionRepository.findByPaperId(paperId);
         List<ExamRecord> records = examRecordRepository.findByPaperId(paperId);
         Map<Integer, Long> qc = Map.of(paperId, (long) pqs.size());
@@ -196,7 +218,47 @@ public class TeacherServiceImpl implements TeacherService {
             throw new RuntimeException("该试卷已有考试记录，不能删除，可后续改为归档/禁用");
         }
         paperQuestionRepository.deleteByPaperId(paperId);
+        paperTargetRepository.deleteByPaperId(paperId);
         paperRepository.deleteById(paperId);
+    }
+
+    @Override
+    @Transactional
+    public PaperListDTO publishPaper(Integer paperId, List<PaperTargetDTO> targets) {
+        Integer teacherId = ensureTeacher();
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能发布其他教师的试卷");
+        }
+        if (paper.getTitle() == null || paper.getTitle().isBlank()) {
+            throw new RuntimeException("试卷标题不能为空");
+        }
+        List<PaperQuestion> questions = paperQuestionRepository.findByPaperId(paperId);
+        if (questions.isEmpty()) {
+            throw new RuntimeException("试卷必须至少包含一道题");
+        }
+        if (questions.stream().anyMatch(q -> q.getScore() == null || q.getScore() < 0)) {
+            throw new RuntimeException("每道题分值必须大于等于0");
+        }
+        savePaperTargets(paperId, targets, true);
+        paper.setPublished(true);
+        paper.setPublishedAt(LocalDateTime.now());
+        paper = paperRepository.save(paper);
+        return toPaperListDTO(paper, Map.of(paperId, (long) questions.size()), Map.of(paperId, (long) examRecordRepository.findByPaperId(paperId).size()));
+    }
+
+    @Override
+    public PaperListDTO updateLeaderboardVisibility(Integer paperId, Boolean visible) {
+        Integer teacherId = ensureTeacher();
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能修改其他教师的试卷");
+        }
+        paper.setLeaderboardPublic(Boolean.TRUE.equals(visible));
+        paper = paperRepository.save(paper);
+        List<PaperQuestion> pqs = paperQuestionRepository.findByPaperId(paperId);
+        List<ExamRecord> records = examRecordRepository.findByPaperId(paperId);
+        return toPaperListDTO(paper, Map.of(paperId, (long) pqs.size()), Map.of(paperId, (long) records.size()));
     }
 
     @Override
@@ -237,19 +299,96 @@ public class TeacherServiceImpl implements TeacherService {
         if (questions == null || questions.isEmpty()) {
             throw new RuntimeException("题目列表不能为空");
         }
-        // Remove old questions
+        Map<Integer, Double> oldScoreMap = paperQuestionRepository.findByPaperId(paperId).stream()
+                .collect(Collectors.toMap(PaperQuestion::getQuestionId, pq -> pq.getScore() == null ? 0.0 : pq.getScore(), (a, b) -> a));
         paperQuestionRepository.deleteByPaperId(paperId);
-        // Add new ones
+        Map<Integer, Double> newScoreMap = new HashMap<>();
         for (PaperQuestionDTO pq : questions) {
             if (!questionRepository.existsById(pq.getQuestionId())) {
                 throw new RuntimeException("题目 " + pq.getQuestionId() + " 不存在");
             }
+            double score = pq.getScore() != null ? pq.getScore() : 0.0;
+            if (score < 0) {
+                throw new RuntimeException("题目分值必须大于等于0");
+            }
             PaperQuestion paperQuestion = new PaperQuestion();
             paperQuestion.setPaperId(paperId);
             paperQuestion.setQuestionId(pq.getQuestionId());
-            paperQuestion.setScore(pq.getScore() != null ? pq.getScore() : 0.0);
+            paperQuestion.setScore(score);
             paperQuestionRepository.save(paperQuestion);
+            newScoreMap.put(pq.getQuestionId(), score);
         }
+        recalculateSubmittedRecords(paperId, oldScoreMap, newScoreMap);
+    }
+
+    // ==================== Class Management ====================
+
+    @Override
+    public List<ClassRoomDTO> getClasses() {
+        Integer teacherId = ensureTeacher();
+        return classRoomRepository.findByTeacherId(teacherId).stream()
+                .map(classRoom -> toClassRoomDTO(classRoom, false))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public ClassRoomDTO createClass(String name) {
+        Integer teacherId = ensureTeacher();
+        if (name == null || name.isBlank()) {
+            throw new RuntimeException("班级名称不能为空");
+        }
+        ClassRoom classRoom = new ClassRoom();
+        classRoom.setName(name.trim());
+        classRoom.setTeacherId(teacherId);
+        classRoom.setJoinCode(generateJoinCode());
+        classRoom.setCreatedAt(LocalDateTime.now());
+        return toClassRoomDTO(classRoomRepository.save(classRoom), true);
+    }
+
+    @Override
+    public ClassRoomDTO getClassDetail(Integer classId) {
+        Integer teacherId = ensureTeacher();
+        ClassRoom classRoom = getOwnedClassOrThrow(classId, teacherId);
+        return toClassRoomDTO(classRoom, true);
+    }
+
+    @Override
+    @Transactional
+    public ClassRoomDTO addClassStudent(Integer classId, Integer studentId) {
+        Integer teacherId = ensureTeacher();
+        ClassRoom classRoom = getOwnedClassOrThrow(classId, teacherId);
+        if (studentId == null) {
+            throw new RuntimeException("studentId不能为空");
+        }
+        User student = userRepository.findById(studentId)
+                .filter(user -> "student".equals(user.getRole()))
+                .orElseThrow(() -> new RuntimeException("指定学生不存在"));
+        if (!classMemberRepository.existsByClassIdAndStudentId(classRoom.getId(), student.getId())) {
+            ClassMember member = new ClassMember();
+            member.setClassId(classRoom.getId());
+            member.setStudentId(student.getId());
+            member.setJoinedAt(LocalDateTime.now());
+            classMemberRepository.save(member);
+        }
+        return toClassRoomDTO(classRoom, true);
+    }
+
+    @Override
+    @Transactional
+    public void removeClassStudent(Integer classId, Integer studentId) {
+        Integer teacherId = ensureTeacher();
+        getOwnedClassOrThrow(classId, teacherId);
+        classMemberRepository.deleteByClassIdAndStudentId(classId, studentId);
+    }
+
+    @Override
+    public List<StudentDTO> getStudents(String keyword) {
+        ensureTeacher();
+        String kw = keyword == null ? "" : keyword.trim().toLowerCase();
+        return userRepository.findByRole("student").stream()
+                .filter(user -> kw.isEmpty() || user.getUsername().toLowerCase().contains(kw))
+                .map(user -> new StudentDTO(user.getId(), user.getUsername()))
+                .collect(Collectors.toList());
     }
 
     // ==================== Exam Records ====================
@@ -335,6 +474,60 @@ public class TeacherServiceImpl implements TeacherService {
         return dto;
     }
 
+    @Override
+    public PaperStatisticsDTO getPaperStatistics(Integer paperId, Integer classId, List<Integer> studentIds) {
+        Integer teacherId = ensureTeacher();
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能查看其他教师试卷的统计");
+        }
+        Map<Integer, ExamRecord> bestRecords = bestSubmittedRecordsByStudent(paperId);
+        List<ExamRecord> records = new ArrayList<>(bestRecords.values());
+        PaperStatisticsDTO dto = new PaperStatisticsDTO();
+        dto.setSubmittedCount(records.size());
+        dto.setOverallAverage(average(records));
+        dto.setMaxScore(records.stream().map(ExamRecord::getTotalScore).filter(Objects::nonNull).max(Double::compareTo).orElse(null));
+        dto.setMinScore(records.stream().map(ExamRecord::getTotalScore).filter(Objects::nonNull).min(Double::compareTo).orElse(null));
+        dto.setStudentScores(toStudentScores(records));
+
+        List<ClassRoom> classes = classRoomRepository.findByTeacherId(teacherId);
+        for (ClassRoom classRoom : classes) {
+            if (classId != null && !Objects.equals(classId, classRoom.getId())) {
+                continue;
+            }
+            Set<Integer> memberIds = classMemberRepository.findByClassId(classRoom.getId()).stream()
+                    .map(ClassMember::getStudentId)
+                    .collect(Collectors.toSet());
+            List<ExamRecord> classRecords = records.stream()
+                    .filter(record -> memberIds.contains(record.getStudentId()))
+                    .collect(Collectors.toList());
+            PaperStatisticsDTO.ClassAverageDTO item = new PaperStatisticsDTO.ClassAverageDTO();
+            item.setClassId(classRoom.getId());
+            item.setClassName(classRoom.getName());
+            item.setSubmittedCount(classRecords.size());
+            item.setAverageScore(average(classRecords));
+            dto.getClassAverages().add(item);
+        }
+
+        if (studentIds != null && !studentIds.isEmpty()) {
+            Set<Integer> selected = new HashSet<>(studentIds);
+            dto.setSelectedStudentsAverage(average(records.stream()
+                    .filter(record -> selected.contains(record.getStudentId()))
+                    .collect(Collectors.toList())));
+        }
+        return dto;
+    }
+
+    @Override
+    public List<LeaderboardItemDTO> getLeaderboard(Integer paperId) {
+        Integer teacherId = ensureTeacher();
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能查看其他教师试卷的排行榜");
+        }
+        return toLeaderboard(bestSubmittedRecordsByStudent(paperId).values());
+    }
+
     // ==================== Grading ====================
 
     @Override
@@ -418,6 +611,49 @@ public class TeacherServiceImpl implements TeacherService {
         }
     }
 
+    private void recalculateSubmittedRecords(Integer paperId, Map<Integer, Double> oldScoreMap, Map<Integer, Double> newScoreMap) {
+        List<ExamRecord> records = examRecordRepository.findByPaperIdAndSubmitTimeIsNotNull(paperId);
+        if (records.isEmpty()) {
+            return;
+        }
+        Map<Integer, Question> questionMap = questionRepository.findAllById(newScoreMap.keySet()).stream()
+                .collect(Collectors.toMap(Question::getId, q -> q));
+        for (ExamRecord record : records) {
+            List<AnswerDetail> details = answerDetailRepository.findByRecordId(record.getId());
+            for (AnswerDetail detail : details) {
+                Double newScore = newScoreMap.get(detail.getQuestionId());
+                if (newScore == null) {
+                    detail.setScoreGot(0.0);
+                    answerDetailRepository.save(detail);
+                    continue;
+                }
+                Question question = questionMap.get(detail.getQuestionId());
+                if (question == null) {
+                    continue;
+                }
+                if (AUTO_GRADE_TYPES.contains(question.getType())) {
+                    detail.setScoreGot(Boolean.TRUE.equals(detail.getIsCorrect()) ? newScore : 0.0);
+                } else if ("short_answer".equals(question.getType())) {
+                    double oldScore = oldScoreMap.getOrDefault(detail.getQuestionId(), 0.0);
+                    double oldGot = detail.getScoreGot() == null ? 0.0 : detail.getScoreGot();
+                    if (oldGot <= 0) {
+                        detail.setScoreGot(0.0);
+                    } else if (oldScore > 0) {
+                        detail.setScoreGot(roundScore(oldGot / oldScore * newScore));
+                    } else {
+                        detail.setScoreGot(Math.min(oldGot, newScore));
+                    }
+                }
+                answerDetailRepository.save(detail);
+            }
+            recalculateTotalScore(record.getId());
+        }
+    }
+
+    private double roundScore(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
     private QuestionDTO toQuestionDTO(Question q) {
         QuestionDTO dto = new QuestionDTO();
         dto.setId(q.getId());
@@ -441,6 +677,12 @@ public class TeacherServiceImpl implements TeacherService {
         dto.setMaxAttempts(paper.getMaxAttempts());
         dto.setReleaseAnswerFlag(paper.getReleaseAnswerFlag());
         dto.setAnswerReleaseTime(paper.getAnswerReleaseTime());
+        dto.setPublished(Boolean.TRUE.equals(paper.getPublished()));
+        dto.setPublishedAt(paper.getPublishedAt());
+        dto.setLeaderboardPublic(Boolean.TRUE.equals(paper.getLeaderboardPublic()));
+        dto.setTargets(buildTargetDTOs(paper.getId()));
+        dto.setTargetSummary(buildTargetSummary(dto.getTargets()));
+        dto.setAverageScore(average(new ArrayList<>(bestSubmittedRecordsByStudent(paper.getId()).values())));
         dto.setQuestionCount(questionCounts.getOrDefault(paper.getId(), 0L).intValue());
         dto.setRecordCount(recordCounts.getOrDefault(paper.getId(), 0L).intValue());
         return dto;
@@ -459,5 +701,190 @@ public class TeacherServiceImpl implements TeacherService {
         dto.setSubmitted(record.getSubmitTime() != null);
         dto.setHasSubjective(hasSubjective);
         return dto;
+    }
+
+    private void savePaperTargets(Integer paperId, List<PaperTargetDTO> targets, boolean requireTargets) {
+        if (targets == null || targets.isEmpty()) {
+            if (requireTargets) {
+                throw new RuntimeException("发布范围必须设置，或明确选择全部学生");
+            }
+            return;
+        }
+        Integer teacherId = ensureTeacher();
+        paperTargetRepository.deleteByPaperId(paperId);
+        boolean hasValidTarget = false;
+        for (PaperTargetDTO target : targets) {
+            if (target == null || target.getTargetType() == null) {
+                continue;
+            }
+            String type = target.getTargetType().trim().toUpperCase();
+            PaperTarget entity = new PaperTarget();
+            entity.setPaperId(paperId);
+            entity.setTargetType(type);
+            if (PaperTarget.TYPE_ALL.equals(type)) {
+                entity.setTargetId(null);
+                hasValidTarget = true;
+            } else if (PaperTarget.TYPE_CLASS.equals(type)) {
+                ClassRoom classRoom = getOwnedClassOrThrow(target.getTargetId(), teacherId);
+                entity.setTargetId(classRoom.getId());
+                hasValidTarget = true;
+            } else if (PaperTarget.TYPE_STUDENT.equals(type)) {
+                User student = userRepository.findById(target.getTargetId())
+                        .filter(user -> "student".equals(user.getRole()))
+                        .orElseThrow(() -> new RuntimeException("指定学生不存在"));
+                entity.setTargetId(student.getId());
+                hasValidTarget = true;
+            } else {
+                throw new RuntimeException("发布范围类型无效");
+            }
+            paperTargetRepository.save(entity);
+        }
+        if (requireTargets && !hasValidTarget) {
+            throw new RuntimeException("发布范围必须设置，或明确选择全部学生");
+        }
+    }
+
+    private List<PaperTargetDTO> buildTargetDTOs(Integer paperId) {
+        return paperTargetRepository.findByPaperId(paperId).stream()
+                .map(target -> {
+                    String name = null;
+                    if (PaperTarget.TYPE_ALL.equals(target.getTargetType())) {
+                        name = "全部学生";
+                    } else if (PaperTarget.TYPE_CLASS.equals(target.getTargetType())) {
+                        name = classRoomRepository.findById(target.getTargetId()).map(ClassRoom::getName).orElse("未知班级");
+                    } else if (PaperTarget.TYPE_STUDENT.equals(target.getTargetType())) {
+                        name = userRepository.findById(target.getTargetId()).map(User::getUsername).orElse("未知学生");
+                    }
+                    return new PaperTargetDTO(target.getTargetType(), target.getTargetId(), name);
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String buildTargetSummary(List<PaperTargetDTO> targets) {
+        if (targets == null || targets.isEmpty()) {
+            return "未设置";
+        }
+        if (targets.stream().anyMatch(target -> PaperTarget.TYPE_ALL.equals(target.getTargetType()))) {
+            return "全部学生";
+        }
+        long classCount = targets.stream().filter(target -> PaperTarget.TYPE_CLASS.equals(target.getTargetType())).count();
+        long studentCount = targets.stream().filter(target -> PaperTarget.TYPE_STUDENT.equals(target.getTargetType())).count();
+        List<String> parts = new ArrayList<>();
+        if (classCount > 0) parts.add(classCount + " 个班级");
+        if (studentCount > 0) parts.add(studentCount + " 名学生");
+        return String.join("、", parts);
+    }
+
+    private ClassRoom getOwnedClassOrThrow(Integer classId, Integer teacherId) {
+        if (classId == null) {
+            throw new RuntimeException("classId不能为空");
+        }
+        ClassRoom classRoom = classRoomRepository.findById(classId)
+                .orElseThrow(() -> new RuntimeException("班级不存在"));
+        if (!Objects.equals(classRoom.getTeacherId(), teacherId)) {
+            throw new RuntimeException("不能管理其他教师的班级");
+        }
+        return classRoom;
+    }
+
+    private ClassRoomDTO toClassRoomDTO(ClassRoom classRoom, boolean includeStudents) {
+        ClassRoomDTO dto = new ClassRoomDTO();
+        dto.setId(classRoom.getId());
+        dto.setName(classRoom.getName());
+        dto.setTeacherId(classRoom.getTeacherId());
+        dto.setJoinCode(classRoom.getJoinCode());
+        dto.setCreatedAt(classRoom.getCreatedAt());
+        List<ClassMember> members = classMemberRepository.findByClassId(classRoom.getId());
+        dto.setMemberCount(members.size());
+        if (includeStudents) {
+            Map<Integer, User> users = userRepository.findAllById(
+                    members.stream().map(ClassMember::getStudentId).collect(Collectors.toList())
+            ).stream().collect(Collectors.toMap(User::getId, user -> user));
+            dto.setStudents(members.stream()
+                    .map(member -> users.get(member.getStudentId()))
+                    .filter(Objects::nonNull)
+                    .map(user -> new StudentDTO(user.getId(), user.getUsername()))
+                    .collect(Collectors.toList()));
+        }
+        return dto;
+    }
+
+    private String generateJoinCode() {
+        String code;
+        do {
+            code = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        } while (classRoomRepository.findByJoinCode(code).isPresent());
+        return code;
+    }
+
+    private Map<Integer, ExamRecord> bestSubmittedRecordsByStudent(Integer paperId) {
+        Map<Integer, ExamRecord> best = new HashMap<>();
+        for (ExamRecord record : examRecordRepository.findByPaperIdAndSubmitTimeIsNotNull(paperId)) {
+            ExamRecord current = best.get(record.getStudentId());
+            if (current == null || compareLeaderboardRecord(record, current) < 0) {
+                best.put(record.getStudentId(), record);
+            }
+        }
+        return best;
+    }
+
+    private int compareLeaderboardRecord(ExamRecord left, ExamRecord right) {
+        double leftScore = left.getTotalScore() == null ? 0.0 : left.getTotalScore();
+        double rightScore = right.getTotalScore() == null ? 0.0 : right.getTotalScore();
+        int scoreCompare = Double.compare(rightScore, leftScore);
+        if (scoreCompare != 0) {
+            return scoreCompare;
+        }
+        LocalDateTime leftTime = left.getSubmitTime() == null ? LocalDateTime.MAX : left.getSubmitTime();
+        LocalDateTime rightTime = right.getSubmitTime() == null ? LocalDateTime.MAX : right.getSubmitTime();
+        return leftTime.compareTo(rightTime);
+    }
+
+    private List<LeaderboardItemDTO> toLeaderboard(Collection<ExamRecord> records) {
+        List<ExamRecord> sorted = records.stream()
+                .sorted(this::compareLeaderboardRecord)
+                .collect(Collectors.toList());
+        Map<Integer, String> usernames = userRepository.findAllById(
+                sorted.stream().map(ExamRecord::getStudentId).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(User::getId, User::getUsername));
+        List<LeaderboardItemDTO> items = new ArrayList<>();
+        int rank = 1;
+        for (ExamRecord record : sorted) {
+            LeaderboardItemDTO item = new LeaderboardItemDTO();
+            item.setRank(rank++);
+            item.setUsername(usernames.getOrDefault(record.getStudentId(), "未知"));
+            item.setScore(record.getTotalScore());
+            item.setSubmitTime(record.getSubmitTime());
+            items.add(item);
+        }
+        return items;
+    }
+
+    private Double average(List<ExamRecord> records) {
+        if (records == null || records.isEmpty()) {
+            return null;
+        }
+        return roundScore(records.stream()
+                .map(ExamRecord::getTotalScore)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0.0));
+    }
+
+    private List<PaperStatisticsDTO.StudentScoreDTO> toStudentScores(List<ExamRecord> records) {
+        Map<Integer, String> usernames = userRepository.findAllById(
+                records.stream().map(ExamRecord::getStudentId).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(User::getId, User::getUsername));
+        return records.stream()
+                .sorted(this::compareLeaderboardRecord)
+                .map(record -> {
+                    PaperStatisticsDTO.StudentScoreDTO dto = new PaperStatisticsDTO.StudentScoreDTO();
+                    dto.setStudentId(record.getStudentId());
+                    dto.setUsername(usernames.getOrDefault(record.getStudentId(), "未知"));
+                    dto.setScore(record.getTotalScore());
+                    return dto;
+                })
+                .collect(Collectors.toList());
     }
 }

@@ -11,5 +11,6 @@ import java.util.Optional;
 public interface ExamRecordRepository extends JpaRepository<ExamRecord, Integer> {
     List<ExamRecord> findByStudentId(Integer studentId);
     List<ExamRecord> findByPaperId(Integer paperId);
+    List<ExamRecord> findByPaperIdAndSubmitTimeIsNotNull(Integer paperId);
     Optional<ExamRecord> findByStudentIdAndPaperId(Integer studentId, Integer paperId);
 }

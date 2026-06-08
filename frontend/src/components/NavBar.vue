@@ -5,6 +5,7 @@
       <!-- 学生菜单 -->
       <template v-if="role === 'student'">
         <router-link to="/student">首页</router-link>
+        <router-link to="/student/classes">我的班级</router-link>
         <router-link to="/student/records">考试记录</router-link>
       </template>
 
@@ -12,6 +13,7 @@
       <template v-else-if="role === 'teacher'">
         <router-link to="/teacher">首页</router-link>
         <router-link to="/teacher/questions">题库管理</router-link>
+        <router-link to="/teacher/classes">班级管理</router-link>
         <router-link to="/teacher/papers">试卷管理</router-link>
       </template>
 

@@ -13,6 +13,7 @@ public class PaperListDTO {
     private String status;
     private String statusText;
     private Integer inProgressRecordId;
+    private Boolean leaderboardPublic;
 
     public PaperListDTO() {}
 
@@ -46,4 +47,6 @@ public class PaperListDTO {
     public void setStatusText(String statusText) { this.statusText = statusText; }
     public Integer getInProgressRecordId() { return inProgressRecordId; }
     public void setInProgressRecordId(Integer inProgressRecordId) { this.inProgressRecordId = inProgressRecordId; }
+    public Boolean getLeaderboardPublic() { return leaderboardPublic; }
+    public void setLeaderboardPublic(Boolean leaderboardPublic) { this.leaderboardPublic = leaderboardPublic; }
 }

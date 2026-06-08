@@ -29,3 +29,15 @@ export function getExamRecords() {
 export function getExamRecordDetail(recordId) {
   return request.get(`/api/student/exam-records/${recordId}`)
 }
+
+export function getMyClasses() {
+  return request.get('/api/student/classes')
+}
+
+export function joinClass(joinCode) {
+  return request.post('/api/student/classes/join', { joinCode })
+}
+
+export function getLeaderboard(paperId) {
+  return request.get(`/api/student/papers/${paperId}/leaderboard`)
+}

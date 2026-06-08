@@ -8,6 +8,8 @@ import com.exam.dto.student.StartExamRequest;
 import com.exam.dto.student.StartExamResponse;
 import com.exam.dto.student.SubmitExamRequest;
 import com.exam.dto.student.SubmitExamResponse;
+import com.exam.dto.common.ClassRoomDTO;
+import com.exam.dto.common.LeaderboardItemDTO;
 
 import java.util.List;
 
@@ -23,4 +25,10 @@ public interface StudentService {
     List<ExamRecordDTO> getMyExamRecords();
 
     ExamRecordDetailDTO getExamRecordDetail(Integer recordId);
+
+    List<ClassRoomDTO> getMyClasses();
+
+    ClassRoomDTO joinClass(String joinCode);
+
+    List<LeaderboardItemDTO> getLeaderboard(Integer paperId);
 }
