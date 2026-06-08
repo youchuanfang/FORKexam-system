@@ -12,6 +12,7 @@ import com.exam.dto.student.StartExamResponse;
 import com.exam.dto.student.SubmitExamRequest;
 import com.exam.dto.student.SubmitExamResponse;
 import com.exam.service.student.StudentService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -76,5 +77,10 @@ public class StudentController {
     @GetMapping("/papers/{paperId}/leaderboard")
     public Result<List<LeaderboardItemDTO>> getLeaderboard(@PathVariable Integer paperId) {
         return Result.success(studentService.getLeaderboard(paperId));
+    }
+
+    @GetMapping("/exam-records/{recordId}/export-wrong-questions")
+    public void exportWrongQuestions(@PathVariable Integer recordId, HttpServletResponse response) {
+        studentService.exportWrongQuestions(recordId, response);
     }
 }

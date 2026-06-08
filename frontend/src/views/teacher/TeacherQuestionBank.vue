@@ -7,6 +7,7 @@
       </div>
       <div class="header-actions">
         <button class="primary-btn" type="button" @click="openAddDialog">新增题目</button>
+        <button class="secondary-btn" type="button" @click="openBatchDialog">批量导入</button>
         <button class="secondary-btn" type="button" @click="loadQuestions">刷新</button>
       </div>
     </header>
@@ -56,6 +57,30 @@
       </table>
     </section>
 
+    <!-- 批量导入对话框 -->
+    <div v-if="batchDialogOpen" class="dialog-overlay" @click.self="batchDialogOpen = false">
+      <div class="dialog-box">
+        <h3>批量导入题目</h3>
+        <p class="state-text" style="margin-bottom:12px">请粘贴 JSON 数组格式的题目数据，或上传 .json 文件</p>
+        <div class="form-group">
+          <label>上传 JSON 文件</label>
+          <input type="file" accept=".json" @change="handleFileUpload" />
+        </div>
+        <div class="form-group">
+          <label>或手动粘贴 JSON</label>
+          <textarea v-model="batchJson" rows="12" placeholder='[{"type":"single_choice","content":"题目内容","options":"[\"A. 选项1\", \"B. 选项2\"]","answer":"A","courseId":1}]'></textarea>
+        </div>
+        <p v-if="batchError" class="error-text">{{ batchError }}</p>
+        <p v-if="batchSuccess" class="state-text">{{ batchSuccess }}</p>
+        <div class="dialog-actions">
+          <button class="secondary-btn" type="button" @click="batchDialogOpen = false">取消</button>
+          <button class="primary-btn" type="button" :disabled="batchSubmitting" @click="handleBatchImport">
+            {{ batchSubmitting ? '导入中...' : '导入' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 新增/编辑对话框 -->
     <div v-if="dialogOpen" class="dialog-overlay" @click.self="closeDialog">
       <div class="dialog-box">
@@ -95,7 +120,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { getQuestions, createQuestion, updateQuestion, deleteQuestion } from '../../api/teacher'
+import { getQuestions, createQuestion, updateQuestion, deleteQuestion, createQuestionsBatch } from '../../api/teacher'
 
 const questions = ref([])
 const loading = ref(false)
@@ -108,6 +133,13 @@ const editId = ref(null)
 const submitting = ref(false)
 const submitError = ref('')
 const form = ref({ type: '', content: '', options: '', answer: '', referenceAnswer: '' })
+
+// 批量导入
+const batchDialogOpen = ref(false)
+const batchJson = ref('')
+const batchSubmitting = ref(false)
+const batchError = ref('')
+const batchSuccess = ref('')
 
 const types = [
   { key: '', label: '全部' },
@@ -216,6 +248,47 @@ async function handleDelete(q) {
     }
   } catch (err) {
     error.value = err.response?.data?.message || err.message || '删除失败'
+  }
+}
+
+function openBatchDialog() {
+  batchJson.value = ''
+  batchError.value = ''
+  batchSuccess.value = ''
+  batchDialogOpen.value = true
+}
+
+function handleFileUpload(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => { batchJson.value = ev.target.result }
+  reader.readAsText(file)
+}
+
+async function handleBatchImport() {
+  if (!batchJson.value.trim()) {
+    batchError.value = '请输入题目数据'
+    return
+  }
+  batchSubmitting.value = true
+  batchError.value = ''
+  batchSuccess.value = ''
+  try {
+    const data = JSON.parse(batchJson.value)
+    if (!Array.isArray(data)) throw new Error('数据格式必须为 JSON 数组')
+    const res = await createQuestionsBatch(data)
+    if (res.code === 200) {
+      batchSuccess.value = `成功导入 ${res.data.length} 道题目`
+      batchJson.value = ''
+      await loadQuestions()
+    } else {
+      batchError.value = res.message || '导入失败'
+    }
+  } catch (err) {
+    batchError.value = err.message || 'JSON 格式错误或导入失败'
+  } finally {
+    batchSubmitting.value = false
   }
 }
 

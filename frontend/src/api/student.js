@@ -41,3 +41,7 @@ export function joinClass(joinCode) {
 export function getLeaderboard(paperId) {
   return request.get(`/api/student/papers/${paperId}/leaderboard`)
 }
+
+export function exportWrongQuestions(recordId) {
+  return request.get(`/api/student/exam-records/${recordId}/export-wrong-questions`, { responseType: 'blob' })
+}

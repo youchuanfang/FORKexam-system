@@ -16,7 +16,16 @@
             <p>开始时间：{{ formatTime(record.startTime) }}</p>
             <p>提交时间：{{ record.submitTime ? formatTime(record.submitTime) : '未提交' }}</p>
           </div>
-          <strong>{{ record.totalScore ?? 0 }} 分</strong>
+          <div class="record-side">
+            <strong>{{ record.totalScore ?? 0 }} 分</strong>
+            <button
+              v-if="record.submitTime"
+              class="secondary-btn export-btn"
+              type="button"
+              :disabled="exporting"
+              @click="handleExportWrong"
+            >{{ exporting ? '导出中...' : '导出错题 Excel' }}</button>
+          </div>
         </div>
 
         <div v-if="record.answers?.length" class="answer-list">
@@ -61,7 +70,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { getExamRecordDetail, getLeaderboard } from '../../api/student'
+import { getExamRecordDetail, getLeaderboard, exportWrongQuestions } from '../../api/student'
 
 const route = useRoute()
 const record = ref(null)
@@ -69,6 +78,7 @@ const loading = ref(false)
 const error = ref('')
 const leaderboard = ref([])
 const leaderboardLoading = ref(false)
+const exporting = ref(false)
 
 const labels = {
   single_choice: '单选题',
@@ -139,6 +149,25 @@ async function loadRecord() {
   }
 }
 
+async function handleExportWrong() {
+  exporting.value = true
+  try {
+    const res = await exportWrongQuestions(route.params.recordId)
+    const url = window.URL.createObjectURL(new Blob([res]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `wrong_questions_${route.params.recordId}.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    error.value = '导出失败'
+  } finally {
+    exporting.value = false
+  }
+}
+
 async function loadLeaderboard() {
   leaderboardLoading.value = true
   try {
@@ -159,6 +188,8 @@ onMounted(loadRecord)
 .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
 .record-summary { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
 .record-summary strong { color: #111827; font-size: 28px; }
+.record-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.export-btn { font-size: 13px !important; }
 h1, p { margin: 0; }
 h1 { color: #111827; font-size: 26px; margin-bottom: 8px; }
 .record-summary p, .state-text { color: #6b7280; }

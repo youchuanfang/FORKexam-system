@@ -14,6 +14,7 @@
             <strong :class="['timer', { danger: remainingSeconds <= 60 }]">剩余时间：{{ formattedRemaining }}</strong>
             <button class="secondary-btn" type="button" @click="router.push('/student')">返回首页</button>
           </div>
+          <div v-if="showTabWarning" class="tab-warning">⚠️ 你已多次切换离开考试页面（{{ tabSwitchCount }} 次），请专注作答</div>
         </header>
 
         <form class="question-list" @submit.prevent="handleSubmit(false)">
@@ -85,6 +86,9 @@ const error = ref('')
 const answers = reactive({})
 const remainingSeconds = ref(0)
 let timerId = null
+let autoSaveId = null
+const tabSwitchCount = ref(0)
+const showTabWarning = ref(false)
 
 const labels = {
   single_choice: '单选题',
@@ -202,6 +206,47 @@ function clearTimer() {
     window.clearInterval(timerId)
     timerId = null
   }
+  if (autoSaveId) {
+    window.clearInterval(autoSaveId)
+    autoSaveId = null
+  }
+}
+
+function autoSaveAnswers() {
+  const key = storageKey() + '_autosave'
+  const data = {}
+  for (const qid of Object.keys(answers)) {
+    if (answers[qid] !== undefined && answers[qid] !== '') {
+      data[qid] = answers[qid]
+    }
+  }
+  if (Object.keys(data).length > 0) {
+    sessionStorage.setItem(key, JSON.stringify(data))
+  }
+}
+
+function restoreAutoSave() {
+  const key = storageKey() + '_autosave'
+  const saved = sessionStorage.getItem(key)
+  if (saved) {
+    try {
+      const data = JSON.parse(saved)
+      for (const [qid, val] of Object.entries(data)) {
+        if (!answers[qid] || answers[qid] === '') {
+          answers[qid] = val
+        }
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.hidden && !submitted.value) {
+    tabSwitchCount.value++
+    if (tabSwitchCount.value > 3) {
+      showTabWarning.value = true
+    }
+  }
 }
 
 async function loadExam() {
@@ -281,12 +326,17 @@ onBeforeRouteLeave(() => {
 
 onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
-  loadExam()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  loadExam().then(() => {
+    restoreAutoSave()
+    autoSaveId = window.setInterval(autoSaveAnswers, 30000)
+  })
 })
 
 onBeforeUnmount(() => {
   clearTimer()
   window.removeEventListener('beforeunload', beforeUnload)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -300,6 +350,11 @@ h1 { color: #111827; font-size: 26px; margin-bottom: 8px; }
 .exam-header p, .state-text { color: #6b7280; }
 .timer { color: #1f2937; font-size: 18px; }
 .timer.danger { color: #dc2626; }
+.tab-warning {
+  background: #fef3c7; color: #92400e; padding: 10px 16px;
+  border-radius: 6px; margin-bottom: 14px; font-size: 14px;
+  border: 1px solid #fcd34d;
+}
 .question-list { display: grid; gap: 14px; }
 .question-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
 .question-head { display: flex; justify-content: space-between; color: #374151; margin-bottom: 10px; }

@@ -12,19 +12,19 @@
         <router-link to="/teacher/questions" class="dash-card">
           <div class="dash-icon">📋</div>
           <h3>题库管理</h3>
-          <p>新增、编辑、删除题目，支持单选、多选、判断、填空、简答五种题型。</p>
+          <p>新增、编辑、删除题目，支持批量导入，支持五种题型。</p>
         </router-link>
 
         <router-link to="/teacher/papers" class="dash-card">
           <div class="dash-icon">📝</div>
           <h3>试卷管理</h3>
-          <p>创建试卷、设置考试参数、从题库选题组卷。</p>
+          <p>创建试卷、设置考试参数、从题库选题组卷、发布与取消发布。</p>
         </router-link>
 
-        <router-link to="/teacher/papers" class="dash-card">
-          <div class="dash-icon">📊</div>
-          <h3>阅卷评分</h3>
-          <p>查看学生考试成绩，批改主观题。</p>
+        <router-link to="/teacher/classes" class="dash-card">
+          <div class="dash-icon">🏫</div>
+          <h3>班级管理</h3>
+          <p>创建班级、查看邀请码、管理班级学生。</p>
         </router-link>
       </div>
     </section>

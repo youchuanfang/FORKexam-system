@@ -1,5 +1,6 @@
 package com.exam.service.teacher;
 
+import com.exam.common.PageResult;
 import com.exam.common.UserContext;
 import com.exam.dto.common.ClassRoomDTO;
 import com.exam.dto.common.LeaderboardItemDTO;
@@ -8,6 +9,9 @@ import com.exam.dto.common.StudentDTO;
 import com.exam.dto.teacher.*;
 import com.exam.entity.*;
 import com.exam.repository.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,6 +72,26 @@ public class TeacherServiceImpl implements TeacherService {
     }
 
     @Override
+    public PageResult<QuestionDTO> getQuestionsPaged(String type, String keyword, int page, int size) {
+        Integer teacherId = ensureTeacher();
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100));
+        Page<Question> questionPage;
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+        boolean hasType = type != null && !type.isBlank();
+        if (hasKeyword) {
+            questionPage = questionRepository.searchAccessibleQuestionsPaged(teacherId, keyword.trim(), pageable);
+        } else if (hasType) {
+            questionPage = questionRepository.findAccessibleByTypePaged(teacherId, type, pageable);
+        } else {
+            questionPage = questionRepository.findAccessibleQuestionsPaged(teacherId, pageable);
+        }
+        List<QuestionDTO> content = questionPage.getContent().stream()
+                .map(this::toQuestionDTO).collect(Collectors.toList());
+        return new PageResult<>(content, questionPage.getTotalElements(),
+                questionPage.getTotalPages(), questionPage.getNumber(), questionPage.getSize());
+    }
+
+    @Override
     public QuestionDTO createQuestion(QuestionDTO dto) {
         Integer teacherId = ensureTeacher();
         if (dto.getType() == null || dto.getType().isBlank()) {
@@ -117,6 +141,28 @@ public class TeacherServiceImpl implements TeacherService {
         questionRepository.deleteById(id);
     }
 
+    @Override
+    @Transactional
+    public List<QuestionDTO> createQuestionsBatch(List<QuestionDTO> dtos) {
+        Integer teacherId = ensureTeacher();
+        List<QuestionDTO> results = new ArrayList<>();
+        for (QuestionDTO dto : dtos) {
+            if (dto.getType() == null || dto.getType().isBlank()) continue;
+            if (dto.getContent() == null || dto.getContent().isBlank()) continue;
+            Question question = new Question();
+            question.setType(dto.getType());
+            question.setContent(dto.getContent());
+            question.setOptions(dto.getOptions());
+            question.setAnswer(dto.getAnswer());
+            question.setReferenceAnswer(dto.getReferenceAnswer());
+            question.setCourseId(dto.getCourseId());
+            question.setCreatedBy(teacherId);
+            question = questionRepository.save(question);
+            results.add(toQuestionDTO(question));
+        }
+        return results;
+    }
+
     // ==================== Paper Management ====================
 
     @Override
@@ -135,6 +181,37 @@ public class TeacherServiceImpl implements TeacherService {
                 .sorted(Comparator.comparing(Paper::getId, Comparator.nullsLast(Integer::compareTo)))
                 .map(paper -> toPaperListDTO(paper, questionCounts, recordCounts))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResult<PaperListDTO> getPapersPaged(int page, int size) {
+        Integer teacherId = ensureTeacher();
+        List<Paper> allPapers = paperRepository.findByCreatedBy(teacherId);
+        // 批量查询优化：一次性获取所有 question 和 record 数量
+        Set<Integer> paperIds = allPapers.stream().map(Paper::getId).collect(Collectors.toSet());
+        Map<Integer, Long> questionCounts = new HashMap<>();
+        Map<Integer, Long> recordCounts = new HashMap<>();
+        if (!paperIds.isEmpty()) {
+            for (Integer pid : paperIds) {
+                questionCounts.put(pid, (long) paperQuestionRepository.findByPaperId(pid).size());
+                recordCounts.put(pid, (long) examRecordRepository.findByPaperId(pid).size());
+            }
+        }
+        // 排序后手动分页
+        allPapers.sort(Comparator.comparing(Paper::getId, Comparator.nullsLast(Integer::compareTo)).reversed());
+        int total = allPapers.size();
+        int fromIdx = page * size;
+        int toIdx = Math.min(fromIdx + size, total);
+        List<PaperListDTO> content;
+        if (fromIdx >= total) {
+            content = List.of();
+        } else {
+            content = allPapers.subList(fromIdx, toIdx).stream()
+                    .map(p -> toPaperListDTO(p, questionCounts, recordCounts))
+                    .collect(Collectors.toList());
+        }
+        int totalPages = (int) Math.ceil((double) total / size);
+        return new PageResult<>(content, total, totalPages, page, size);
     }
 
     @Override
@@ -245,6 +322,21 @@ public class TeacherServiceImpl implements TeacherService {
         paper.setPublishedAt(LocalDateTime.now());
         paper = paperRepository.save(paper);
         return toPaperListDTO(paper, Map.of(paperId, (long) questions.size()), Map.of(paperId, (long) examRecordRepository.findByPaperId(paperId).size()));
+    }
+
+    @Override
+    @Transactional
+    public PaperListDTO unpublishPaper(Integer paperId) {
+        Integer teacherId = ensureTeacher();
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能修改其他教师的试卷");
+        }
+        paper.setPublished(false);
+        paper.setPublishedAt(null);
+        paper = paperRepository.save(paper);
+        List<PaperQuestion> pqs = paperQuestionRepository.findByPaperId(paperId);
+        return toPaperListDTO(paper, Map.of(paperId, (long) pqs.size()), Map.of(paperId, (long) examRecordRepository.findByPaperId(paperId).size()));
     }
 
     @Override
@@ -422,6 +514,41 @@ public class TeacherServiceImpl implements TeacherService {
     }
 
     @Override
+    public PageResult<ExamRecordDTO> getExamRecordsPaged(Integer paperId, int page, int size) {
+        Integer teacherId = ensureTeacher();
+        if (paperId == null) {
+            return new PageResult<>(List.of(), 0, 0, page, size);
+        }
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能查看其他教师的考试记录");
+        }
+        List<ExamRecord> allRecords = examRecordRepository.findByPaperId(paperId);
+        // 批量查询用户名
+        Set<Integer> userIds = allRecords.stream().map(ExamRecord::getStudentId).collect(Collectors.toSet());
+        Map<Integer, String> userNames = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getUsername));
+        int total = allRecords.size();
+        int fromIdx = page * size;
+        int toIdx = Math.min(fromIdx + size, total);
+        List<ExamRecordDTO> content;
+        if (fromIdx >= total) {
+            content = List.of();
+        } else {
+            content = allRecords.subList(fromIdx, toIdx).stream().map(record -> {
+                String studentName = userNames.getOrDefault(record.getStudentId(), "未知");
+                boolean hasSubjective = answerDetailRepository.findByRecordId(record.getId()).stream().anyMatch(d -> {
+                    Question q = questionRepository.findById(d.getQuestionId()).orElse(null);
+                    return q != null && "short_answer".equals(q.getType());
+                });
+                return toExamRecordDTO(record, paper, studentName, hasSubjective);
+            }).collect(Collectors.toList());
+        }
+        int totalPages = (int) Math.ceil((double) total / size);
+        return new PageResult<>(content, total, totalPages, page, size);
+    }
+
+    @Override
     public ExamRecordDetailDTO getExamRecordDetail(Integer recordId) {
         Integer teacherId = ensureTeacher();
         ExamRecord record = examRecordRepository.findById(recordId)
@@ -515,6 +642,24 @@ public class TeacherServiceImpl implements TeacherService {
                     .filter(record -> selected.contains(record.getStudentId()))
                     .collect(Collectors.toList())));
         }
+
+        // 分数分布统计
+        Map<String, Long> distribution = new LinkedHashMap<>();
+        distribution.put("0-59", 0L);
+        distribution.put("60-69", 0L);
+        distribution.put("70-79", 0L);
+        distribution.put("80-89", 0L);
+        distribution.put("90-100", 0L);
+        for (ExamRecord record : records) {
+            double score = record.getTotalScore() == null ? 0.0 : record.getTotalScore();
+            if (score < 60) distribution.merge("0-59", 1L, Long::sum);
+            else if (score < 70) distribution.merge("60-69", 1L, Long::sum);
+            else if (score < 80) distribution.merge("70-79", 1L, Long::sum);
+            else if (score < 90) distribution.merge("80-89", 1L, Long::sum);
+            else distribution.merge("90-100", 1L, Long::sum);
+        }
+        dto.setScoreDistribution(distribution);
+
         return dto;
     }
 
@@ -574,6 +719,48 @@ public class TeacherServiceImpl implements TeacherService {
 
         // Recalculate total
         recalculateTotalScore(recordId);
+    }
+
+    // ==================== Export ====================
+
+    @Override
+    public void exportPaperRecords(Integer paperId, jakarta.servlet.http.HttpServletResponse response) {
+        Integer teacherId = ensureTeacher();
+        Paper paper = getPaperOrThrow(paperId);
+        if (!Objects.equals(paper.getCreatedBy(), teacherId)) {
+            throw new RuntimeException("不能导出其他教师试卷的成绩");
+        }
+
+        Map<Integer, ExamRecord> bestRecords = bestSubmittedRecordsByStudent(paperId);
+        List<ExamRecord> records = new ArrayList<>(bestRecords.values());
+        Map<Integer, String> usernames = userRepository.findAllById(
+                records.stream().map(ExamRecord::getStudentId).collect(Collectors.toSet())
+        ).stream().collect(Collectors.toMap(User::getId, User::getUsername));
+
+        try {
+            org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+            org.apache.poi.xssf.usermodel.XSSFSheet sheet = workbook.createSheet("考试成绩");
+            org.apache.poi.xssf.usermodel.XSSFRow header = sheet.createRow(0);
+            String[] headers = {"序号", "学生姓名", "开始时间", "提交时间", "总分"};
+            for (int i = 0; i < headers.length; i++) {
+                header.createCell(i).setCellValue(headers[i]);
+            }
+            int rowIdx = 1;
+            for (ExamRecord record : records) {
+                org.apache.poi.xssf.usermodel.XSSFRow row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(rowIdx - 1);
+                row.createCell(1).setCellValue(usernames.getOrDefault(record.getStudentId(), "未知"));
+                row.createCell(2).setCellValue(record.getStartTime() != null ? record.getStartTime().toString() : "");
+                row.createCell(3).setCellValue(record.getSubmitTime() != null ? record.getSubmitTime().toString() : "");
+                row.createCell(4).setCellValue(record.getTotalScore() != null ? record.getTotalScore() : 0.0);
+            }
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setHeader("Content-Disposition", "attachment; filename=paper_" + paperId + "_records.xlsx");
+            workbook.write(response.getOutputStream());
+            workbook.close();
+        } catch (Exception e) {
+            throw new RuntimeException("导出Excel失败: " + e.getMessage());
+        }
     }
 
     // ==================== Helper Methods ====================

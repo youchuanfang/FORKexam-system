@@ -10,6 +10,7 @@ import com.exam.dto.student.SubmitExamRequest;
 import com.exam.dto.student.SubmitExamResponse;
 import com.exam.dto.common.ClassRoomDTO;
 import com.exam.dto.common.LeaderboardItemDTO;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.List;
 
@@ -31,4 +32,6 @@ public interface StudentService {
     ClassRoomDTO joinClass(String joinCode);
 
     List<LeaderboardItemDTO> getLeaderboard(Integer paperId);
+
+    void exportWrongQuestions(Integer recordId, HttpServletResponse response);
 }

@@ -1,7 +1,9 @@
 package com.exam.dto.teacher;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PaperStatisticsDTO {
     private Integer submittedCount;
@@ -11,6 +13,7 @@ public class PaperStatisticsDTO {
     private Double minScore;
     private List<ClassAverageDTO> classAverages = new ArrayList<>();
     private List<StudentScoreDTO> studentScores = new ArrayList<>();
+    private Map<String, Long> scoreDistribution = new LinkedHashMap<>();
 
     public Integer getSubmittedCount() { return submittedCount; }
     public void setSubmittedCount(Integer submittedCount) { this.submittedCount = submittedCount; }
@@ -26,6 +29,8 @@ public class PaperStatisticsDTO {
     public void setClassAverages(List<ClassAverageDTO> classAverages) { this.classAverages = classAverages; }
     public List<StudentScoreDTO> getStudentScores() { return studentScores; }
     public void setStudentScores(List<StudentScoreDTO> studentScores) { this.studentScores = studentScores; }
+    public Map<String, Long> getScoreDistribution() { return scoreDistribution; }
+    public void setScoreDistribution(Map<String, Long> scoreDistribution) { this.scoreDistribution = scoreDistribution; }
 
     public static class ClassAverageDTO {
         private Integer classId;

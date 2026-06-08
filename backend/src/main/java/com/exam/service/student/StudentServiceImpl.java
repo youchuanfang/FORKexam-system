@@ -151,6 +151,15 @@ public class StudentServiceImpl implements StudentService {
         Paper paper = getPaperOrThrow(record.getPaperId());
         ensurePaperOpenForAnswering(paper);
 
+        // 服务端校验：检查作答是否超时
+        if (paper.getDuration() != null && paper.getDuration() > 0 && record.getStartTime() != null) {
+            long elapsedSeconds = java.time.Duration.between(record.getStartTime(), LocalDateTime.now()).getSeconds();
+            long allowedSeconds = paper.getDuration() * 60L;
+            if (elapsedSeconds > allowedSeconds + 60) { // 允许60秒容差（网络延迟等）
+                throw new RuntimeException("作答已超时，考试时长 " + paper.getDuration() + " 分钟，已过 " + (elapsedSeconds / 60) + " 分钟");
+            }
+        }
+
         List<PaperQuestion> paperQuestions = paperQuestionRepository.findByPaperId(record.getPaperId());
         if (paperQuestions.isEmpty()) {
             throw new RuntimeException("试卷没有题目，不能提交");
@@ -471,7 +480,7 @@ public class StudentServiceImpl implements StudentService {
         if ("multi_choice".equals(type)) {
             correct = normalizeMultiChoice(studentAnswer).equals(normalizeMultiChoice(question.getAnswer()));
         } else if ("fill_blank".equals(type)) {
-            correct = normalizeText(studentAnswer).equals(normalizeText(question.getAnswer()));
+            correct = matchFillBlank(studentAnswer, question.getAnswer());
         } else if ("single_choice".equals(type) || "true_false".equals(type)) {
             correct = normalizeText(studentAnswer).equals(normalizeText(question.getAnswer()));
         } else {
@@ -483,6 +492,28 @@ public class StudentServiceImpl implements StudentService {
 
     private String normalizeText(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    /**
+     * 填空题评分：支持 trim、忽略大小写、多答案（逗号/分号分隔，任一匹配即判对）
+     */
+    private boolean matchFillBlank(String studentAnswer, String correctAnswer) {
+        if (studentAnswer == null || correctAnswer == null) {
+            return false;
+        }
+        String normalizedStudent = studentAnswer.trim().toLowerCase();
+        if (normalizedStudent.isEmpty()) {
+            return false;
+        }
+        // 将正确答案按逗号、分号分割，支持多个等价答案
+        String[] correctParts = correctAnswer.split("[,，;；]");
+        for (String part : correctParts) {
+            String normalizedPart = part.trim().toLowerCase();
+            if (!normalizedPart.isEmpty() && normalizedStudent.equals(normalizedPart)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String normalizeAnswerValue(Object value) {
@@ -715,6 +746,81 @@ public class StudentServiceImpl implements StudentService {
             return second;
         }
         return null;
+    }
+
+    @Override
+    public void exportWrongQuestions(Integer recordId, jakarta.servlet.http.HttpServletResponse response) {
+        Integer studentId = ensureStudent();
+        ExamRecord record = getRecordOrThrow(recordId);
+        ensureRecordOwner(record, studentId);
+        if (record.getSubmitTime() == null) {
+            throw new RuntimeException("该考试尚未提交，无法导出");
+        }
+
+        Paper paper = getPaperOrThrow(record.getPaperId());
+        Map<Integer, PaperQuestion> scoreMap = paperQuestionRepository.findByPaperId(record.getPaperId()).stream()
+                .collect(Collectors.toMap(PaperQuestion::getQuestionId, Function.identity(), (a, b) -> a));
+        Map<Integer, Question> questionMap = questionRepository.findAllById(scoreMap.keySet()).stream()
+                .collect(Collectors.toMap(Question::getId, Function.identity()));
+        List<AnswerDetail> details = answerDetailRepository.findByRecordId(recordId);
+
+        try {
+            org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+            org.apache.poi.xssf.usermodel.XSSFSheet sheet = workbook.createSheet("错题导出");
+
+            // 标题行
+            org.apache.poi.xssf.usermodel.XSSFRow titleRow = sheet.createRow(0);
+            String[] headers = {"序号", "题型", "题目内容", "你的答案", "正确答案/参考答案", "得分", "满分", "结果"};
+            for (int i = 0; i < headers.length; i++) {
+                titleRow.createCell(i).setCellValue(headers[i]);
+            }
+
+            int rowIdx = 1;
+            int seq = 0;
+            for (AnswerDetail detail : details) {
+                Question question = questionMap.get(detail.getQuestionId());
+                if (question == null) continue;
+                seq++;
+
+                PaperQuestion pq = scoreMap.get(detail.getQuestionId());
+                double maxScore = pq != null && pq.getScore() != null ? pq.getScore() : 0.0;
+                double got = detail.getScoreGot() != null ? detail.getScoreGot() : 0.0;
+                boolean isCorrect = Boolean.TRUE.equals(detail.getIsCorrect());
+
+                org.apache.poi.xssf.usermodel.XSSFRow row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(seq);
+                row.createCell(1).setCellValue(question.getType());
+                row.createCell(2).setCellValue(question.getContent() != null ? question.getContent() : "");
+
+                String studentAns = detail.getStudentAnswer();
+                row.createCell(3).setCellValue(studentAns != null ? studentAns : "未作答");
+
+                String correctAns = "short_answer".equals(question.getType())
+                        ? (question.getReferenceAnswer() != null ? question.getReferenceAnswer() : question.getAnswer())
+                        : question.getAnswer();
+                row.createCell(4).setCellValue(correctAns != null ? correctAns : "");
+
+                row.createCell(5).setCellValue(got);
+                row.createCell(6).setCellValue(maxScore);
+                row.createCell(7).setCellValue(isCorrect ? "正确" : "错误");
+            }
+
+            // 添加汇总行
+            if (rowIdx > 1) {
+                org.apache.poi.xssf.usermodel.XSSFRow summaryRow = sheet.createRow(rowIdx);
+                summaryRow.createCell(0).setCellValue("");
+                summaryRow.createCell(2).setCellValue("总分：" + (record.getTotalScore() != null ? record.getTotalScore() : 0));
+                long wrongCount = details.stream().filter(d -> !Boolean.TRUE.equals(d.getIsCorrect())).count();
+                summaryRow.createCell(7).setCellValue("错误题数：" + wrongCount);
+            }
+
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setHeader("Content-Disposition", "attachment; filename=wrong_questions_" + recordId + ".xlsx");
+            workbook.write(response.getOutputStream());
+            workbook.close();
+        } catch (Exception e) {
+            throw new RuntimeException("导出错题Excel失败: " + e.getMessage());
+        }
     }
 
     private record GradeResult(Boolean isCorrect, Double scoreGot) {}

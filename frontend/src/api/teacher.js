@@ -7,6 +7,11 @@ export function getQuestions(params) {
   return request.get('/api/teacher/questions', { params })
 }
 
+// 分页获取题目列表（支持关键词搜索）
+export function getQuestionsPaged(params) {
+  return request.get('/api/teacher/questions/paged', { params })
+}
+
 // 新增题目
 export function createQuestion(data) {
   return request.post('/api/teacher/questions', data)
@@ -22,11 +27,21 @@ export function deleteQuestion(id) {
   return request.delete(`/api/teacher/questions/${id}`)
 }
 
+// 批量导入题目
+export function createQuestionsBatch(data) {
+  return request.post('/api/teacher/questions/batch', data)
+}
+
 // ==================== 试卷管理 ====================
 
 // 获取试卷列表
 export function getPapers() {
   return request.get('/api/teacher/papers')
+}
+
+// 分页获取试卷列表
+export function getPapersPaged(params) {
+  return request.get('/api/teacher/papers/paged', { params })
 }
 
 // 获取试卷详情
@@ -46,6 +61,14 @@ export function updatePaper(id, data) {
 
 export function publishPaper(id, targets) {
   return request.post(`/api/teacher/papers/${id}/publish`, targets)
+}
+
+export function unpublishPaper(id) {
+  return request.post(`/api/teacher/papers/${id}/unpublish`)
+}
+
+export function exportPaperRecords(paperId) {
+  return request.get(`/api/teacher/papers/${paperId}/export`, { responseType: 'blob' })
 }
 
 export function updateLeaderboardVisibility(id, leaderboardPublic) {
@@ -96,6 +119,11 @@ export function getStudents(params) {
 // 查看考试记录
 export function getExamRecords(params) {
   return request.get('/api/teacher/exam-records', { params })
+}
+
+// 分页获取考试记录
+export function getExamRecordsPaged(params) {
+  return request.get('/api/teacher/exam-records/paged', { params })
 }
 
 // 查看考试记录详情

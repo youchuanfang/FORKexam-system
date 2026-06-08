@@ -44,6 +44,8 @@
             <router-link class="secondary-btn" :to="`/teacher/papers/${paper.id}/edit`">编辑组卷</router-link>
             <router-link class="secondary-btn" :to="`/teacher/papers/${paper.id}/records`">查看记录</router-link>
             <button v-if="!paper.published" class="primary-btn" type="button" @click="handlePublish(paper)">确认发布</button>
+            <button v-if="paper.published" class="secondary-btn" type="button" @click="handleUnpublish(paper)">取消发布</button>
+            <button v-if="(paper.recordCount ?? 0) > 0" class="secondary-btn" type="button" @click="handleExport(paper)">导出成绩</button>
             <button class="secondary-btn" type="button" @click="toggleLeaderboard(paper)">排行榜</button>
             <label class="switch-row">
               <input :checked="paper.leaderboardPublic" type="checkbox" @change="handleLeaderboardPublic(paper, $event.target.checked)" />
@@ -86,6 +88,19 @@
                   <small>{{ formatTime(item.submitTime) }}</small>
                 </div>
               </div>
+              <!-- 分数分布 -->
+              <div v-if="statistics?.scoreDistribution" class="stats-block" style="margin-top:12px">
+                <strong>分数分布</strong>
+                <div class="dist-bars">
+                  <div v-for="(count, range) in statistics.scoreDistribution" :key="range" class="dist-bar-row">
+                    <span class="dist-label">{{ range }}</span>
+                    <div class="dist-bar-track">
+                      <div class="dist-bar-fill" :style="{ width: distPercent(count) + '%' }"></div>
+                    </div>
+                    <span class="dist-count">{{ count }} 人</span>
+                  </div>
+                </div>
+              </div>
               <p v-if="leaderboard.length === 0" class="state-text">暂无排行榜数据。</p>
             </template>
           </div>
@@ -97,7 +112,7 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { getPapers, deletePaper, publishPaper, updateLeaderboardVisibility, getLeaderboard, getPaperStatistics, getStudents } from '../../api/teacher'
+import { getPapers, deletePaper, publishPaper, unpublishPaper, exportPaperRecords, updateLeaderboardVisibility, getLeaderboard, getPaperStatistics, getStudents } from '../../api/teacher'
 
 const papers = ref([])
 const loading = ref(false)
@@ -161,6 +176,39 @@ async function handlePublish(paper) {
   } catch (err) {
     error.value = err.response?.data?.message || err.message || '发布失败'
   }
+}
+
+async function handleUnpublish(paper) {
+  if (!confirm(`确认取消发布试卷 "${paper.title}" 吗？学生将无法再看到该试卷。`)) return
+  try {
+    const res = await unpublishPaper(paper.id)
+    if (res.code === 200) await loadPapers()
+    else error.value = res.message || '取消发布失败'
+  } catch (err) {
+    error.value = err.response?.data?.message || err.message || '取消发布失败'
+  }
+}
+
+async function handleExport(paper) {
+  try {
+    const res = await exportPaperRecords(paper.id)
+    const url = window.URL.createObjectURL(new Blob([res]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `paper_${paper.id}_records.xlsx`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    error.value = '导出失败'
+  }
+}
+
+function distPercent(count) {
+  if (!statistics.value?.scoreDistribution) return 0
+  const max = Math.max(1, ...Object.values(statistics.value.scoreDistribution))
+  return Math.round((count / max) * 100)
 }
 
 async function handleLeaderboardPublic(paper, visible) {
@@ -314,6 +362,12 @@ h1 { color: #1f2937; font-size: 28px; margin-bottom: 8px; }
   grid-template-columns: 54px 1fr 80px 170px;
   padding: 8px 10px;
 }
+.dist-bars { display: grid; gap: 6px; margin-top: 8px; }
+.dist-bar-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.dist-label { width: 50px; color: #6b7280; text-align: right; flex-shrink: 0; }
+.dist-bar-track { flex: 1; height: 16px; background: #f3f4f6; border-radius: 8px; overflow: hidden; }
+.dist-bar-fill { height: 100%; background: #2563eb; border-radius: 8px; transition: width 0.3s; min-width: 2px; }
+.dist-count { width: 36px; color: #374151; font-weight: 500; flex-shrink: 0; }
 
 .switch-row {
   align-items: center;
