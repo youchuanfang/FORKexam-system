@@ -62,7 +62,7 @@ public class AdminController {
         } else {
             allUsers = userRepository.findAll();
         }
-        // 手动分页
+
         int total = allUsers.size();
         int fromIndex = page * size;
         int toIndex = Math.min(fromIndex + size, total);
@@ -72,7 +72,7 @@ public class AdminController {
         } else {
             pageContent = allUsers.subList(fromIndex, toIndex);
         }
-        // 脱敏：不返回密码
+
         List<Map<String, Object>> safeUsers = pageContent.stream().map(u -> {
             Map<String, Object> m = new java.util.LinkedHashMap<>();
             m.put("id", u.getId());
@@ -123,11 +123,11 @@ public class AdminController {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("用户不存在"));
         String currentStatus = user.getStatus();
-        if (currentStatus == null || "active".equals(currentStatus)) {
-            user.setStatus("disabled");
-        } else {
-            user.setStatus("active");
+        boolean disabling = currentStatus == null || "active".equals(currentStatus);
+        if (disabling && id.equals(UserContext.getUserId())) {
+            throw new RuntimeException("不能禁用当前登录管理员账号");
         }
+        user.setStatus(disabling ? "disabled" : "active");
         userRepository.save(user);
         return Result.success(Map.of("status", user.getStatus()));
     }

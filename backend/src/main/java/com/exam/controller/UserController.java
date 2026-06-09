@@ -20,7 +20,7 @@ public class UserController {
      * 登录接口
      * POST /api/user/login
      * 参数：{ username, password, role }
-     * 返回：{ code:200, data: { token, role } }
+     * 返回：{ code: 200, data: { token, role } }
      */
     @PostMapping("/login")
     public Result<?> login(@RequestBody Map<String, String> params) {
@@ -38,7 +38,7 @@ public class UserController {
      * 注册接口
      * POST /api/user/register
      * 参数：{ username, password, role }
-     * 返回：{ code:200, message: "success" }
+     * 返回：{ code: 200, message: "success" }
      */
     @PostMapping("/register")
     public Result<?> register(@RequestBody Map<String, String> params) {
