@@ -47,11 +47,11 @@
 
             <div v-else-if="question.type === 'true_false'" class="answer-area">
               <label class="choice-line">
-                <input v-model="answers[question.questionId]" type="radio" :name="`q-${question.questionId}`" value="true" />
+                <input v-model="answers[question.questionId]" type="radio" :name="`q-${question.questionId}`" value="正确" />
                 <span>正确</span>
               </label>
               <label class="choice-line">
-                <input v-model="answers[question.questionId]" type="radio" :name="`q-${question.questionId}`" value="false" />
+                <input v-model="answers[question.questionId]" type="radio" :name="`q-${question.questionId}`" value="错误" />
                 <span>错误</span>
               </label>
             </div>

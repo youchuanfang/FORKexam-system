@@ -44,7 +44,7 @@
             <td class="content-cell">{{ q.content }}</td>
             <td class="answer-summary">
               <span v-if="q.options" class="options-hint">有选项</span>
-              <span v-if="q.answer" class="answer-hint">{{ truncate(q.answer, 20) }}</span>
+              <span v-if="q.answer" class="answer-hint">{{ truncate(displayQuestionAnswer(q), 20) }}</span>
             </td>
             <td>
               <div class="row-actions">
@@ -102,7 +102,7 @@
         </div>
         <div class="form-group">
           <label>正确答案</label>
-          <input v-model="form.answer" placeholder="单选:A / 多选:A,C / 判断:true / 填空:答案 / 简答:可留空" />
+          <input v-model="form.answer" placeholder="单选:A / 多选:A,C / 判断:正确/错误 / 填空:答案 / 简答:可留空" />
         </div>
         <div class="form-group">
           <label>参考答案（简答题可填写评分要点）</label>
@@ -157,6 +157,29 @@ function typeLabel(type) {
 function truncate(str, n) {
   if (!str) return ''
   return str.length > n ? str.slice(0, n) + '...' : str
+}
+
+function displayQuestionAnswer(question) {
+  if (question?.type !== 'true_false') {
+    return question?.answer || ''
+  }
+  const normalized = normalizeTrueFalseAnswer(question.answer)
+  if (normalized === 'true') return '正确'
+  if (normalized === 'false') return '错误'
+  return question.answer || ''
+}
+
+function normalizeTrueFalseAnswer(value) {
+  if (value === null || value === undefined) return ''
+  const text = String(value).trim()
+  const lowered = text.toLowerCase()
+  if (['正确', '对', '是', 'true', '1', 'yes'].includes(lowered) || ['正确', '对', '是'].includes(text)) {
+    return 'true'
+  }
+  if (['错误', '错', '否', 'false', '0', 'no'].includes(lowered) || ['错误', '错', '否'].includes(text)) {
+    return 'false'
+  }
+  return ''
 }
 
 async function loadQuestions() {

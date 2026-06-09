@@ -481,7 +481,9 @@ public class StudentServiceImpl implements StudentService {
             correct = normalizeMultiChoice(studentAnswer).equals(normalizeMultiChoice(question.getAnswer()));
         } else if ("fill_blank".equals(type)) {
             correct = matchFillBlank(studentAnswer, question.getAnswer());
-        } else if ("single_choice".equals(type) || "true_false".equals(type)) {
+        } else if ("true_false".equals(type)) {
+            correct = matchTrueFalseAnswer(studentAnswer, question.getAnswer());
+        } else if ("single_choice".equals(type)) {
             correct = normalizeText(studentAnswer).equals(normalizeText(question.getAnswer()));
         } else {
             correct = false;
@@ -492,6 +494,44 @@ public class StudentServiceImpl implements StudentService {
 
     private String normalizeText(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private boolean matchTrueFalseAnswer(String studentAnswer, String correctAnswer) {
+        String normalizedStudent = normalizeTrueFalseAnswer(studentAnswer);
+        String normalizedCorrect = normalizeTrueFalseAnswer(correctAnswer);
+        if (normalizedStudent != null && normalizedCorrect != null) {
+            return normalizedStudent.equals(normalizedCorrect);
+        }
+        return normalizeText(studentAnswer).equals(normalizeText(correctAnswer));
+    }
+
+    private String normalizeTrueFalseAnswer(String value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        String lowered = text.toLowerCase();
+        if (Set.of("正确", "对", "是", "true", "1", "yes").contains(lowered)) {
+            return "true";
+        }
+        if (Set.of("错误", "错", "否", "false", "0", "no").contains(lowered)) {
+            return "false";
+        }
+        return null;
+    }
+
+    private String displayTrueFalseAnswer(String value) {
+        String normalized = normalizeTrueFalseAnswer(value);
+        if ("true".equals(normalized)) {
+            return "正确";
+        }
+        if ("false".equals(normalized)) {
+            return "错误";
+        }
+        return value;
     }
 
     /**
@@ -625,16 +665,22 @@ public class StudentServiceImpl implements StudentService {
                                               boolean canReturnAnswers) {
         AnswerDetailDTO dto = new AnswerDetailDTO();
         dto.setQuestionId(detail.getQuestionId());
-        dto.setStudentAnswer(detail.getStudentAnswer());
         dto.setIsCorrect(detail.getIsCorrect());
         dto.setScoreGot(detail.getScoreGot());
         if (question != null) {
             dto.setType(question.getType());
             dto.setContent(question.getContent());
             dto.setOptions(question.getOptions());
+            dto.setStudentAnswer("true_false".equals(question.getType())
+                    ? displayTrueFalseAnswer(detail.getStudentAnswer())
+                    : detail.getStudentAnswer());
             if (canReturnAnswers && AUTO_GRADE_TYPES.contains(question.getType())) {
-                dto.setCorrectAnswer(question.getAnswer());
+                dto.setCorrectAnswer("true_false".equals(question.getType())
+                        ? displayTrueFalseAnswer(question.getAnswer())
+                        : question.getAnswer());
             }
+        } else {
+            dto.setStudentAnswer(detail.getStudentAnswer());
         }
         if (paperQuestion != null) {
             dto.setScore(paperQuestion.getScore());
@@ -792,12 +838,17 @@ public class StudentServiceImpl implements StudentService {
                 row.createCell(1).setCellValue(question.getType());
                 row.createCell(2).setCellValue(question.getContent() != null ? question.getContent() : "");
 
-                String studentAns = detail.getStudentAnswer();
+                String studentAns = "true_false".equals(question.getType())
+                        ? displayTrueFalseAnswer(detail.getStudentAnswer())
+                        : detail.getStudentAnswer();
                 row.createCell(3).setCellValue(studentAns != null ? studentAns : "未作答");
 
                 String correctAns = "short_answer".equals(question.getType())
                         ? (question.getReferenceAnswer() != null ? question.getReferenceAnswer() : question.getAnswer())
                         : question.getAnswer();
+                if ("true_false".equals(question.getType())) {
+                    correctAns = displayTrueFalseAnswer(correctAns);
+                }
                 row.createCell(4).setCellValue(correctAns != null ? correctAns : "");
 
                 row.createCell(5).setCellValue(got);

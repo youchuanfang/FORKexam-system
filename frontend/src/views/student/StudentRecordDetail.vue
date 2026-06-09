@@ -38,7 +38,7 @@
             <pre v-if="answer.options" class="options-text">{{ answer.options }}</pre>
             <div class="student-answer">
               <span>我的答案</span>
-              <p>{{ answer.studentAnswer || '未作答' }}</p>
+              <p>{{ displayAnswer(answer, answer.studentAnswer) || '未作答' }}</p>
             </div>
             <p class="result-text">{{ resultText(answer) }}</p>
             <div v-if="shouldShowCorrectAnswer(answer)" class="correct-answer">
@@ -103,6 +103,9 @@ function getCorrectAnswer(answer) {
   if (answer.type === 'short_answer') {
     return record.value?.referenceAnswerMap?.[answer.questionId] || ''
   }
+  if (answer.type === 'true_false') {
+    return displayTrueFalseAnswer(answer.correctAnswer)
+  }
   return answer.correctAnswer || ''
 }
 
@@ -127,6 +130,33 @@ function resultText(answer) {
     return '自动判分：错误'
   }
   return '未判分'
+}
+
+function displayAnswer(answer, value) {
+  if (answer?.type === 'true_false') {
+    return displayTrueFalseAnswer(value)
+  }
+  return value || ''
+}
+
+function displayTrueFalseAnswer(value) {
+  const normalized = normalizeTrueFalseAnswer(value)
+  if (normalized === 'true') return '正确'
+  if (normalized === 'false') return '错误'
+  return value || ''
+}
+
+function normalizeTrueFalseAnswer(value) {
+  if (value === null || value === undefined) return ''
+  const text = String(value).trim()
+  const lowered = text.toLowerCase()
+  if (['正确', '对', '是', 'true', '1', 'yes'].includes(lowered) || ['正确', '对', '是'].includes(text)) {
+    return 'true'
+  }
+  if (['错误', '错', '否', 'false', '0', 'no'].includes(lowered) || ['错误', '错', '否'].includes(text)) {
+    return 'false'
+  }
+  return ''
 }
 
 async function loadRecord() {

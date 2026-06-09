@@ -2,7 +2,7 @@
   <div class="teacher-page">
     <header class="page-header">
       <div>
-        <h1>{{ isNew ? '新建试卷' : '编辑试卷' }}</h1>
+        <h1>{{ isCreating ? '新建试卷' : '编辑试卷' }}</h1>
         <p>设置试卷基本信息、从题库选题组卷。</p>
       </div>
       <div class="header-actions">
@@ -83,7 +83,9 @@
       </div>
 
       <div class="form-actions">
-        <button class="primary-btn" type="button" :disabled="saving" @click="savePaper">{{ saving ? '保存中...' : '保存试卷信息' }}</button>
+        <button class="primary-btn" type="button" :disabled="saving || !canSavePaper" @click="savePaper">
+          {{ saving ? '保存中...' : '保存试卷信息' }}
+        </button>
         <p v-if="saveMsg" :class="saveError ? 'error-text' : 'state-text'" style="margin-left:12px">{{ saveMsg }}</p>
       </div>
     </section>
@@ -141,7 +143,7 @@
           </div>
         </div>
         <div class="picker-actions">
-          <button class="primary-btn" type="button" :disabled="savingQuestions" @click="saveQuestions">
+          <button class="primary-btn" type="button" :disabled="savingQuestions || !hasQuestionChanges" @click="saveQuestions">
             {{ savingQuestions ? '保存中...' : `保存选题（${selectedIds.size} 题）` }}
           </button>
           <p v-if="qError" class="error-text" style="margin-left:12px">{{ qError }}</p>
@@ -158,12 +160,15 @@ import { getPaper, createPaper, updatePaper, assignQuestions, getQuestions, getP
 
 const route = useRoute()
 const router = useRouter()
-const isNew = !route.params.paperId
-const paperId = ref(isNew ? null : Number(route.params.paperId))
+const initialPaperId = route.params.paperId ? Number(route.params.paperId) : null
+const paperId = ref(Number.isFinite(initialPaperId) ? initialPaperId : null)
+const isCreating = computed(() => !paperId.value)
 const loadError = ref('')
 const saving = ref(false)
 const saveMsg = ref('')
 const saveError = ref(false)
+const savedPaperSnapshot = ref('')
+const savedQuestionsSnapshot = ref('')
 
 const form = ref({
   title: '',
@@ -216,6 +221,17 @@ const targetAll = ref(false)
 const selectedClassIds = ref([])
 const selectedStudentIds = ref([])
 
+const currentPaperSnapshot = computed(() => serializePaperData(buildPaperData()))
+const currentQuestionsSnapshot = computed(() => serializeQuestions(assignedQuestions.value))
+const hasPaperChanges = computed(() => currentPaperSnapshot.value !== savedPaperSnapshot.value)
+const hasQuestionChanges = computed(() => currentQuestionsSnapshot.value !== savedQuestionsSnapshot.value)
+const canSavePaper = computed(() => {
+  if (!form.value.title.trim()) {
+    return false
+  }
+  return isCreating.value || hasPaperChanges.value || hasQuestionChanges.value
+})
+
 const filteredPool = computed(() => {
   let list = poolQuestions.value
   if (pickerType.value) {
@@ -267,6 +283,45 @@ function buildTargets() {
   ]
 }
 
+function buildPaperData() {
+  return {
+    title: form.value.title.trim(),
+    duration: form.value.duration ? Number(form.value.duration) : null,
+    maxAttempts: form.value.maxAttempts ? Number(form.value.maxAttempts) : 1,
+    openStartTime: form.value.openStartTime || null,
+    openEndTime: form.value.openEndTime || null,
+    releaseAnswerFlag: Boolean(form.value.releaseAnswerFlag),
+    answerReleaseTime: form.value.releaseAnswerFlag ? (form.value.answerReleaseTime || null) : null,
+    targets: buildTargets()
+  }
+}
+
+function serializePaperData(data) {
+  const normalizedTargets = (data.targets || [])
+    .map(item => ({
+      targetType: item.targetType,
+      targetId: item.targetId ?? null
+    }))
+    .sort((a, b) => `${a.targetType}:${a.targetId ?? ''}`.localeCompare(`${b.targetType}:${b.targetId ?? ''}`))
+  return JSON.stringify({
+    title: data.title || '',
+    duration: data.duration ?? null,
+    maxAttempts: data.maxAttempts ?? 1,
+    openStartTime: data.openStartTime || null,
+    openEndTime: data.openEndTime || null,
+    releaseAnswerFlag: Boolean(data.releaseAnswerFlag),
+    answerReleaseTime: data.answerReleaseTime || null,
+    targets: normalizedTargets
+  })
+}
+
+function serializeQuestions(questions) {
+  return JSON.stringify((questions || []).map(item => ({
+    questionId: item.questionId,
+    score: Number(item.score || 0)
+  })))
+}
+
 function applyTargets(targets) {
   const list = targets || []
   targetAll.value = list.some(item => item.targetType === 'ALL')
@@ -302,6 +357,7 @@ async function loadExistingQuestions(pid) {
         score: item.score ?? 0,
         question: item.question || null
       }))
+      savedQuestionsSnapshot.value = currentQuestionsSnapshot.value
     } else {
       qError.value = res.message || '加载已选题目失败'
     }
@@ -311,7 +367,11 @@ async function loadExistingQuestions(pid) {
 }
 
 async function loadPaper() {
-  if (isNew) return
+  if (!paperId.value) {
+    savedPaperSnapshot.value = currentPaperSnapshot.value
+    savedQuestionsSnapshot.value = currentQuestionsSnapshot.value
+    return
+  }
   loadError.value = ''
   try {
     const res = await getPaper(paperId.value)
@@ -325,6 +385,7 @@ async function loadPaper() {
       form.value.releaseAnswerFlag = p.releaseAnswerFlag || false
       form.value.answerReleaseTime = toLocalDatetime(p.answerReleaseTime)
       applyTargets(p.targets)
+      savedPaperSnapshot.value = currentPaperSnapshot.value
     } else {
       loadError.value = res.message || '加载失败'
     }
@@ -343,32 +404,26 @@ async function savePaper() {
   saveError.value = false
   saveMsg.value = ''
   try {
-    const data = {
-      title: form.value.title.trim(),
-      duration: form.value.duration ? Number(form.value.duration) : null,
-      maxAttempts: form.value.maxAttempts ? Number(form.value.maxAttempts) : 1,
-      openStartTime: form.value.openStartTime || null,
-      openEndTime: form.value.openEndTime || null,
-      releaseAnswerFlag: form.value.releaseAnswerFlag,
-      answerReleaseTime: form.value.answerReleaseTime || null,
-      targets: buildTargets()
-    }
+    const data = buildPaperData()
     let res
-    if (isNew) {
+    const creatingPaper = isCreating.value
+    if (creatingPaper) {
       res = await createPaper(data)
     } else {
       res = await updatePaper(paperId.value, data)
     }
     if (res.code === 200) {
-      const currentPaperId = isNew ? res.data?.id : paperId.value
+      const currentPaperId = paperId.value || res.data?.id
       if (currentPaperId && assignedQuestions.value.length > 0) {
         await saveQuestionScores(currentPaperId)
       }
       saveMsg.value = '保存成功'
-      if (isNew && res.data && res.data.id) {
+      if (creatingPaper && res.data && res.data.id) {
         paperId.value = res.data.id
         router.replace(`/teacher/papers/${res.data.id}/edit`)
       }
+      savedPaperSnapshot.value = currentPaperSnapshot.value
+      savedQuestionsSnapshot.value = currentQuestionsSnapshot.value
     } else {
       saveError.value = true
       saveMsg.value = res.message || '保存失败'
@@ -398,6 +453,7 @@ async function saveQuestions() {
   qError.value = ''
   try {
     await saveQuestionScores(paperId.value)
+    savedQuestionsSnapshot.value = currentQuestionsSnapshot.value
     qError.value = ''
     alert('分值已保存，已同步更新已提交学生成绩')
   } catch (err) {
