@@ -32,6 +32,9 @@ public class UserServiceImpl implements UserService {
                 || !role.equals(user.getRole())) {
             throw new RuntimeException("账号不存在或密码错误");
         }
+        if ("disabled".equals(user.getStatus())) {
+            throw new RuntimeException("账号已被禁用");
+        }
         String token = jwtUtil.generateToken(user.getId(), user.getRole());
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
@@ -51,6 +54,7 @@ public class UserServiceImpl implements UserService {
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(password));
         user.setRole(role);
+        user.setStatus("active");
         userRepository.save(user);
     }
 }

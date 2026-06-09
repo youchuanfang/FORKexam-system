@@ -22,7 +22,7 @@ public class User {
     @Column(nullable = false, length = 20)
     private String role;
 
-    @Column(length = 20)
+    @Column(nullable = false, length = 20)
     private String status = "active";
 
     public User() {}
@@ -31,6 +31,7 @@ public class User {
         this.username = username;
         this.password = password;
         this.role = role;
+        this.status = "active";
     }
 
     public Integer getId() { return id; }

@@ -8,42 +8,36 @@
       <button class="secondary-btn" @click="logout">退出登录</button>
     </header>
 
-    <!-- 系统概览 -->
     <section class="panel">
       <h3>系统概览</h3>
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-icon">👥</div>
           <div class="stat-num">{{ overview.totalUsers ?? '-' }}</div>
           <div class="stat-label">用户总数</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📋</div>
           <div class="stat-num">{{ overview.totalQuestions ?? '-' }}</div>
           <div class="stat-label">题目总数</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📝</div>
           <div class="stat-num">{{ overview.totalPapers ?? '-' }}</div>
           <div class="stat-label">试卷总数</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📊</div>
           <div class="stat-num">{{ overview.totalRecords ?? '-' }}</div>
           <div class="stat-label">考试记录数</div>
         </div>
       </div>
     </section>
 
-    <!-- 用户管理 -->
-    <section class="panel" style="margin-top:20px">
+    <section class="panel user-panel">
       <h3>用户管理</h3>
       <div class="filter-bar">
         <button
           v-for="r in ['', 'student', 'teacher', 'admin']"
           :key="r"
           :class="['filter-tag', { active: roleFilter === r }]"
-          @click="roleFilter = r; loadUsers()"
+          @click="roleFilter = r; currentPage = 0; loadUsers()"
         >{{ r || '全部' }}</button>
       </div>
 
@@ -67,23 +61,30 @@
               <span :class="['status-pill', roleClass(user.role)]">{{ user.role }}</span>
             </td>
             <td>
-              <span :class="['status-pill', user.status === 'disabled' ? 'disabled' : 'active-status']">{{ user.status === 'disabled' ? '已禁用' : '正常' }}</span>
+              <span :class="['status-pill', user.status === 'disabled' ? 'disabled' : 'active-status']">
+                {{ user.status === 'disabled' ? '已禁用' : '正常' }}
+              </span>
             </td>
             <td>
               <select
                 :value="user.role"
-                @change="changeRole(user, ($event.target).value)"
                 class="role-select"
+                @change="changeRole(user, $event.target.value)"
               >
                 <option value="student">student</option>
                 <option value="teacher">teacher</option>
                 <option value="admin">admin</option>
               </select>
               <button class="text-btn" type="button" @click="handleResetPassword(user)">重置密码</button>
-              <button class="text-btn" type="button" :class="user.status === 'disabled' ? '' : 'danger'" @click="handleToggleStatus(user)">
+              <button
+                class="text-btn"
+                type="button"
+                :class="user.status === 'disabled' ? '' : 'danger'"
+                @click="handleToggleStatus(user)"
+              >
                 {{ user.status === 'disabled' ? '启用' : '禁用' }}
               </button>
-              <span v-if="roleMsg[user.id]" :class="roleOk[user.id] ? 'state-text' : 'error-text'" style="margin-left:8px">
+              <span v-if="roleMsg[user.id]" :class="roleOk[user.id] ? 'state-text' : 'error-text'" class="inline-msg">
                 {{ roleMsg[user.id] }}
               </span>
             </td>
@@ -127,7 +128,9 @@ async function loadOverview() {
   try {
     const res = await request.get('/api/admin/overview')
     if (res.code === 200) overview.value = res.data || {}
-  } catch { /* ignore */ }
+  } catch {
+    // 概览失败不影响用户管理。
+  }
 }
 
 async function loadUsers() {
@@ -221,17 +224,18 @@ onMounted(() => {
 
 <style scoped>
 .admin-page { min-height: 100vh; background: #f5f7fb; padding: 32px; }
+.user-panel { margin-top: 20px; }
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .stat-card {
   background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
   padding: 20px; text-align: center;
 }
-.stat-icon { font-size: 32px; margin-bottom: 8px; }
 .stat-num { font-size: 28px; font-weight: 700; color: #2563eb; }
 .stat-label { font-size: 13px; color: #6b7280; margin-top: 4px; }
 .role-select {
   border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 8px; font-size: 13px;
 }
+.inline-msg { margin-left: 8px; }
 .status-pill.student { background: #dbeafe; color: #1e40af; }
 .status-pill.teacher { background: #d1fae5; color: #065f46; }
 .status-pill.admin { background: #fef3c7; color: #92400e; }
