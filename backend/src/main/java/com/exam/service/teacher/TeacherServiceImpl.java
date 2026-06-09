@@ -584,7 +584,6 @@ public class TeacherServiceImpl implements TeacherService {
             Question question = questionMap.get(detail.getQuestionId());
             ExamRecordDetailDTO.AnswerItem item = new ExamRecordDetailDTO.AnswerItem();
             item.setQuestionId(detail.getQuestionId());
-            item.setStudentAnswer(detail.getStudentAnswer());
             item.setIsCorrect(detail.getIsCorrect());
             item.setScoreGot(detail.getScoreGot());
             item.setScore(scoreMap.getOrDefault(detail.getQuestionId(), 0.0));
@@ -592,8 +591,15 @@ public class TeacherServiceImpl implements TeacherService {
                 item.setType(question.getType());
                 item.setContent(question.getContent());
                 item.setOptions(question.getOptions());
-                item.setCorrectAnswer(question.getAnswer());
+                item.setStudentAnswer("true_false".equals(question.getType())
+                        ? displayTrueFalseAnswer(detail.getStudentAnswer())
+                        : detail.getStudentAnswer());
+                item.setCorrectAnswer("true_false".equals(question.getType())
+                        ? displayTrueFalseAnswer(question.getAnswer())
+                        : question.getAnswer());
                 item.setAutoGraded(AUTO_GRADE_TYPES.contains(question.getType()));
+            } else {
+                item.setStudentAnswer(detail.getStudentAnswer());
             }
             items.add(item);
         }
@@ -818,7 +824,11 @@ public class TeacherServiceImpl implements TeacherService {
                 if (question == null) {
                     continue;
                 }
-                if (AUTO_GRADE_TYPES.contains(question.getType())) {
+                if ("true_false".equals(question.getType())) {
+                    boolean correct = matchTrueFalseAnswer(detail.getStudentAnswer(), question.getAnswer());
+                    detail.setIsCorrect(correct);
+                    detail.setScoreGot(correct ? newScore : 0.0);
+                } else if (AUTO_GRADE_TYPES.contains(question.getType())) {
                     detail.setScoreGot(Boolean.TRUE.equals(detail.getIsCorrect()) ? newScore : 0.0);
                 } else if ("short_answer".equals(question.getType())) {
                     double oldScore = oldScoreMap.getOrDefault(detail.getQuestionId(), 0.0);
@@ -839,6 +849,48 @@ public class TeacherServiceImpl implements TeacherService {
 
     private double roundScore(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private boolean matchTrueFalseAnswer(String studentAnswer, String correctAnswer) {
+        String normalizedStudent = normalizeTrueFalseAnswer(studentAnswer);
+        String normalizedCorrect = normalizeTrueFalseAnswer(correctAnswer);
+        if (normalizedStudent != null && normalizedCorrect != null) {
+            return normalizedStudent.equals(normalizedCorrect);
+        }
+        return normalizeText(studentAnswer).equals(normalizeText(correctAnswer));
+    }
+
+    private String normalizeTrueFalseAnswer(String value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        String lowered = text.toLowerCase();
+        if (Set.of("正确", "对", "是", "true", "1", "yes").contains(lowered)) {
+            return "true";
+        }
+        if (Set.of("错误", "错", "否", "false", "0", "no").contains(lowered)) {
+            return "false";
+        }
+        return null;
+    }
+
+    private String displayTrueFalseAnswer(String value) {
+        String normalized = normalizeTrueFalseAnswer(value);
+        if ("true".equals(normalized)) {
+            return "正确";
+        }
+        if ("false".equals(normalized)) {
+            return "错误";
+        }
+        return value;
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private QuestionDTO toQuestionDTO(Question q) {
